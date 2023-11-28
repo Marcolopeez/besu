@@ -46,7 +46,8 @@ ext.acceptedLicenses = [
   'Public Domain (CC0) License 1.0',
   'Public Domain',
   'Unicode/ICU License',
-  'New BSD License'
+  'New BSD License',
+  'The Json License'
 ]*.toLowerCase()
 
 /**
@@ -73,6 +74,7 @@ downloadLicenses {
   ext.cddl = license('Common Development and Distribution License 1.0', 'http://opensource.org/licenses/CDDL-1.0')
   ext.epl1 = license('Eclipse Public License 1.0', 'https://www.eclipse.org/legal/epl-v10.html')
   ext.mit = license('MIT License', 'http://www.opensource.org/licenses/mit-license.php')
+  ext.jsonLicense = license('The JSON License', 'https://www.json.org/license.html')
   aliases = [
     (apache) : [
       'Apache 2',
@@ -137,6 +139,7 @@ downloadLicenses {
     (group('besu.metrics')) : apache,
     (group('besu.plugins')) : apache,
     (group('besu.services')) : apache,
+    (group('besu.psi')) : apache,
 
     // JNA is dual licensed under Apache v2.0 or LGPL 2 licenses
     // Explicitly declare that we are using the Apache v2.0 license
@@ -171,6 +174,12 @@ downloadLicenses {
     // Explicitly state BSD License for license scanning.
     'org.antlr:antlr-runtime:3.5.2': bsd,
     'org.antlr:ST4:4.3': bsd,
+
+    'edu.alibaba:mpc4j-s2pc-pcg:1.0.4': apache,
+    'edu.alibaba:mpc4j-s2pc-aby:1.0.4': apache,
+    'edu.alibaba:mpc4j-common-tool:1.0.4': apache,
+    'edu.alibaba:mpc4j-s2pc-pso:1.0.4': apache,
+    'edu.alibaba:mpc4j-common-rpc:1.0.4': apache,
   ]
 }
 

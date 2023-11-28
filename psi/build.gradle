@@ -1,31 +1,19 @@
+plugins {
+    id 'java'
+}
 
+group = 'org.hyperledger.besu'
+version = '22.1.0'
 
-apply plugin: 'java-library'
-
-jar {
-  archiveBaseName = 'besu-psi'
-  manifest {
-    attributes(
-      'Specification-Title': archiveBaseName,
-      'Specification-Version': project.version,
-      'Implementation-Title': archiveBaseName,
-      'Implementation-Version': calculateVersion()
-      )
-  }
+repositories {
+    mavenCentral()
 }
 
 repositories {
-        
-     //maven { url "https://repository.apache.org/content/repositories/releases/" }
-     //maven { url "https://repo.maven.apache.org/maven2" }
+    mavenCentral()
 }
 
 dependencies {
-    implementation 'org.apache.commons:commons-lang3:3.9'
-    implementation 'org.json:json:20180130'
-    implementation files('/home/daniel/mpc4j-mod/mpc4j-s2pc-pso/target/mpc4j-s2pc-pso-1.0.4.jar')
-    implementation files('/home/daniel/mpc4j-mod/mpc4j-common-rpc/target/mpc4j-common-rpc-1.0.4.jar')
-    implementation files('/home/daniel/mpc4j-mod/mpc4j-common-tool/target/mpc4j-common-tool-1.0.4.jar')
-    implementation files('/home/daniel/mpc4j-mod/mpc4j-s2pc-pcg/target/mpc4j-s2pc-pcg-1.0.4.jar')
-    implementation files('/home/daniel/mpc4j-mod/mpc4j-s2pc-aby/target/mpc4j-s2pc-aby-1.0.4.jar')
+    //implementation files('/home/marco/mpc4j-1.0.4/mpc4j/mpc4j-s2pc-pso/target/mpc4j-s2pc-pso-1.0.4-jar-with-dependencies.jar')
+    implementation files('/home/marco/mpc4j-mod/mpc4j-mod/mpc4j-s2pc-pso/target/mpc4j-s2pc-pso-1.0.4-jar-with-dependencies.jar')
 }
