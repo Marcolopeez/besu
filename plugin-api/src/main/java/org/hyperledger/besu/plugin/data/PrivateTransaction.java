@@ -139,4 +139,8 @@ public interface PrivateTransaction {
    * @return privacy restriction unrestricted/restricted
    */
   Restriction getRestriction();
+
+  Optional<Bytes> getExtendedPrivacy();
+
+  Optional<Bytes> getPrivateArgs();
 }
