@@ -104,7 +104,6 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
 
   @Override
   public Bytes compute(final Bytes input, final MessageFrame messageFrame) {
-
     if (skipContractExecution(messageFrame)) {
       return Bytes.EMPTY;
     }

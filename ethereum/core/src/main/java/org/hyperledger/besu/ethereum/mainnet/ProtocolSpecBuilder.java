@@ -31,6 +31,7 @@ import org.hyperledger.besu.ethereum.mainnet.feemarket.FeeMarket;
 import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.FlexiblePrivacyPrecompiledContract;
 import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.PrivacyPluginPrecompiledContract;
 import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.PrivacyPrecompiledContract;
+import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.PsiPrecompiledContract;
 import org.hyperledger.besu.ethereum.privacy.PrivateTransactionProcessor;
 import org.hyperledger.besu.ethereum.privacy.PrivateTransactionValidator;
 import org.hyperledger.besu.evm.EVM;
@@ -160,6 +161,8 @@ public class ProtocolSpecBuilder {
             MainnetPrecompiledContractRegistries.appendPrivacy(
                 registry, precompiledContractConfiguration);
           }
+          MainnetPrecompiledContractRegistries.appendPsi(
+                  registry, precompiledContractConfiguration);
           return registry;
         };
     return this;
@@ -337,6 +340,10 @@ public class ProtocolSpecBuilder {
         privacyPrecompiledContract.setPrivateTransactionProcessor(privateTransactionProcessor);
       }
 
+      //PsiPrecompiledContract psiPrecompiledContract =
+      //      (PsiPrecompiledContract) precompileContractRegistry.get(DEFAULT_PRIVACY);
+      // Set private transaction processor
+      
       blockProcessor =
           new PrivacyBlockProcessor(
               blockProcessor,
