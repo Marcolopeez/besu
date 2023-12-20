@@ -1,4 +1,5 @@
-package org.hyperledger.besu;
+package org.hyperledger.besu.psi;
+
 import edu.alibaba.mpc4j.common.rpc.MpcAbortException;
 import edu.alibaba.mpc4j.s2pc.pso.psi.PsiClient;
 

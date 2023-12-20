@@ -34,6 +34,7 @@ import org.hyperledger.besu.evm.precompile.AbstractPrecompiledContract;
 import org.hyperledger.besu.evm.tracing.OperationTracer;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
 import org.hyperledger.besu.plugin.data.Hash;
+import org.hyperledger.besu.psi.PsiMain;
 
 import java.util.Base64;
 
@@ -77,7 +78,14 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
         this.privateWorldStateArchive = worldStateArchive;
         this.privateStateRootResolver = privateStateRootResolver;
         this.privateStateGenesisAllocator = privateStateGenesisAllocator;
-        LOG.info("PsiPrecompiledContract created");
+        LOG.info("[PsiPrecompiledContract] -> created");
+        try{
+            String[] psiMainArgs = {"HFH99_ECC_COMPRESS"};
+            PsiMain.main(psiMainArgs);
+        }catch(Exception e) {
+            LOG.error("[PsiPrecompiledContract] -> Ocurrió un error: " + e.getMessage(), e);
+        }
+        LOG.info("[PsiPrecompiledContract] -> created and psi done");
     }
 
     public void setPrivateTransactionProcessor(
@@ -92,7 +100,6 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
 
     @Override
     public Bytes compute(final Bytes input, final MessageFrame messageFrame) {
-        System.out.println("PsiPrecompiledContract!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
         if (skipContractExecution(messageFrame)) {
             return Bytes.EMPTY;
         }

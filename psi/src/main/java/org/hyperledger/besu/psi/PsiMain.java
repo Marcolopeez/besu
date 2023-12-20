@@ -1,4 +1,4 @@
-package org.hyperledger.besu;
+package org.hyperledger.besu.psi;
 
 
 import edu.alibaba.mpc4j.common.rpc.Rpc;
@@ -51,6 +51,9 @@ public class PsiMain {
     }
 
     public static void main(final String[] args) throws Exception {
+        // Configurar opciones de VM
+        configurarOpcionesVM();
+
         PsiConfig config;
         Rpc serverRpc;
         Rpc clientRpc;
@@ -59,6 +62,12 @@ public class PsiMain {
         Properties log4jProperties = new Properties();
         log4jProperties.load(PsiMain.class.getResourceAsStream("/log4j.properties"));
         PropertyConfigurator.configure(log4jProperties);
+
+        String nuevasVMDeseadas = "/home/marco/mpc4j-1.0.4/mpc4j/mpc4j-native-tool/cmake-build-release:/home/marco/mpc4j-1.0.4/mpc4j/mpc4j-native-fhe/cmake-build-release";
+        LOGGER.info("[---] -> Nuevas Opciones: " + nuevasVMDeseadas);
+
+        // Establecemos las nuevas opciones de VM
+        System.setProperty("java.library.path", nuevasVMDeseadas);
 
         LOGGER.info("create rpc for client and server");
         RpcManager rpcManager = new MemoryRpcManager(2);
@@ -114,6 +123,22 @@ public class PsiMain {
 
         } catch (InterruptedException e) {
             LOGGER.error("Ocurrió un error: " + e.getMessage(), e);
+        }
+    }
+
+    private static void configurarOpcionesVM() {
+        String libPathTool = "/home/marco/mpc4j-1.0.4/mpc4j/mpc4j-native-tool/cmake-build-release";
+        String libPathFhe = "/home/marco/mpc4j-1.0.4/mpc4j/mpc4j-native-fhe/cmake-build-release";
+
+        try {
+            // Cargar la biblioteca nativa para mpc4j-native-tool
+            System.load(libPathTool + "/libmpc4j-native-tool.so");
+
+            // Cargar la biblioteca nativa para mpc4j-native-fhe
+            System.load(libPathFhe + "/libmpc4j-native-fhe.so");
+        } catch (UnsatisfiedLinkError e) {
+            // Manejar la excepción si la carga de la biblioteca falla
+            System.err.println("Error al cargar la biblioteca nativa: " + e.getMessage());
         }
     }
 }
