@@ -63,12 +63,6 @@ public class PsiMain {
         log4jProperties.load(PsiMain.class.getResourceAsStream("/log4j.properties"));
         PropertyConfigurator.configure(log4jProperties);
 
-        String nuevasVMDeseadas = "/home/marco/mpc4j-1.0.4/mpc4j/mpc4j-native-tool/cmake-build-release:/home/marco/mpc4j-1.0.4/mpc4j/mpc4j-native-fhe/cmake-build-release";
-        LOGGER.info("[---] -> Nuevas Opciones: " + nuevasVMDeseadas);
-
-        // Establecemos las nuevas opciones de VM
-        System.setProperty("java.library.path", nuevasVMDeseadas);
-
         LOGGER.info("create rpc for client and server");
         RpcManager rpcManager = new MemoryRpcManager(2);
         serverRpc = rpcManager.getRpc(0);
