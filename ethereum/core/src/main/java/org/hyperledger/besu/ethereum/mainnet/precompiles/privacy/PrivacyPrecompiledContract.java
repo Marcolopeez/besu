@@ -152,6 +152,13 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
       throw new IllegalStateException("Can not communicate with enclave, is it up?", e);
     }
 
+    if (privateTransaction.hasExtendedPrivacy()) {
+      LOG.info("[PrivacyPrecompileContract] Transaction hasExtendedPrivacy");
+
+      final Bytes result = privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
+      System.out.println("Result: "+result);
+    }
+
     LOG.debug("Processing private transaction {} in privacy group {}", pmtHash, privacyGroupId);
 
     final PrivateMetadataUpdater privateMetadataUpdater =

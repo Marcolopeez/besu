@@ -79,13 +79,7 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
         this.privateStateRootResolver = privateStateRootResolver;
         this.privateStateGenesisAllocator = privateStateGenesisAllocator;
         LOG.info("[PsiPrecompiledContract] -> created");
-        try{
-            String[] psiMainArgs = {"HFH99_ECC_COMPRESS"};
-            PsiMain.main(psiMainArgs);
-        }catch(Exception e) {
-            LOG.error("[PsiPrecompiledContract] -> Ocurrió un error: " + e.getMessage(), e);
-        }
-        LOG.info("[PsiPrecompiledContract] -> created and psi done");
+
     }
 
     public void setPrivateTransactionProcessor(
@@ -104,8 +98,8 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
             return Bytes.EMPTY;
         }
 
-        final org.hyperledger.besu.plugin.data.Hash pmtHash =
-                messageFrame.getContextVariable(KEY_TRANSACTION_HASH);
+        /*final org.hyperledger.besu.plugin.data.Hash pmtHash =
+                messageFrame.getContextVariable(KEY_TRANSACTION_HASH);*/
 
         final String key = input.toBase64String();
         final ReceiveResponse receiveResponse;
@@ -148,7 +142,17 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
             throw new IllegalStateException("Can not communicate with enclave, is it up?", e);
         }
 
-        LOG.debug("Processing private transaction {} in privacy group {}", pmtHash, privacyGroupId);
+        LOG.info("[PsiPrecompiledContract] -> executing psi");
+        try{
+            String[] psiMainArgs = {"HFH99_ECC_COMPRESS"};
+            PsiMain.main(psiMainArgs);
+        }catch(Exception e) {
+            LOG.error("[PsiPrecompiledContract] -> Ocurrió un error: " + e.getMessage(), e);
+            return Bytes.EMPTY;
+        }
+        LOG.info("[PsiPrecompiledContract] -> psi done");
+
+        /*LOG.debug("Processing private transaction {} in privacy group {}", pmtHash, privacyGroupId);
 
         final PrivateMetadataUpdater privateMetadataUpdater =
                 messageFrame.getContextVariable(KEY_PRIVATE_METADATA_UPDATER);
@@ -165,10 +169,10 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
                 disposablePrivateState,
                 privateWorldStateUpdater,
                 privacyGroupId,
-                messageFrame.getBlockValues().getNumber());
+                messageFrame.getBlockValues().getNumber());*/
 
 
-        return Bytes.EMPTY;
+        return Bytes.of((byte) 0x01);
     }
 
     protected void maybeApplyGenesisToPrivateWorldState(

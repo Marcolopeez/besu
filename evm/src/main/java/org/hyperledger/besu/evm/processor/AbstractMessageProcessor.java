@@ -22,6 +22,7 @@ import org.hyperledger.besu.evm.account.AccountState;
 import org.hyperledger.besu.evm.frame.MessageFrame;
 import org.hyperledger.besu.evm.tracing.OperationTracer;
 
+import org.apache.tuweni.bytes.Bytes;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.stream.Collectors;
@@ -82,6 +83,8 @@ public abstract class AbstractMessageProcessor {
    * @param operationTracer The tracer recording execution
    */
   protected abstract void codeSuccess(MessageFrame frame, final OperationTracer operationTracer);
+
+  public abstract Bytes executeExtendedPrivacyPrecompiled(final String precompiledAddress, final Bytes input, final MessageFrame messageFrame);
 
   private void clearAccumulatedStateBesidesGasAndOutput(final MessageFrame frame) {
     ArrayList<Address> addresses =

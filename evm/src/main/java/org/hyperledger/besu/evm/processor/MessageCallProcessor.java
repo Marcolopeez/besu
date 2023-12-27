@@ -83,6 +83,26 @@ public class MessageCallProcessor extends AbstractMessageProcessor {
     frame.setState(MessageFrame.State.COMPLETED_SUCCESS);
   }
 
+  @Override
+  public Bytes executeExtendedPrivacyPrecompiled(final String precompiledAddress, final Bytes input, final MessageFrame messageFrame){
+    Bytes output = null;
+    // Check first if the precompileAddress match
+    final PrecompiledContract precompile = precompiles.get(Address.fromHexString(precompiledAddress));
+    if (precompile != null) {
+      output = precompile.compute(input, messageFrame);
+      if (output != null) {
+        LOG.trace(
+                "Precompiled contract {}  successfully executed",
+                precompile.getName());
+      } else {
+        LOG.trace("Precompiled contract  {} failed", precompile);
+      }
+    } else {
+      LOG.trace("Precompiled contract  {} failed", precompile);
+    }
+    return output;
+  }
+
   /**
    * Transfers the message call value from the sender to the recipient.
    *
