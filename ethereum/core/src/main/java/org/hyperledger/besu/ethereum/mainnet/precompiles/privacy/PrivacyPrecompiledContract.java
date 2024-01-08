@@ -154,6 +154,7 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
 
     if (privateTransaction.hasExtendedPrivacy()) {
       LOG.info("[PrivacyPrecompileContract] Transaction hasExtendedPrivacy");
+      System.out.println("ExtendedPrivacy: "+privateTransaction.getExtendedPrivacy());
 
       final Bytes result = privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
       System.out.println("Result: "+result);

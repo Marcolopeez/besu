@@ -581,7 +581,11 @@ public class PrivateTransaction implements org.hyperledger.besu.plugin.data.Priv
   }
 
   public boolean hasExtendedPrivacy() {
-    return getExtendedPrivacy().isPresent();
+    if (getExtendedPrivacy().isPresent()) {
+      return !getExtendedPrivacy().get().equals(Bytes.fromHexString("0x"));
+    }else{
+      return false;
+    }
   }
 
   private static Bytes32 computeSenderRecoveryHash(
