@@ -19,10 +19,12 @@ import org.hyperledger.besu.enclave.types.PrivacyGroup;
 import org.hyperledger.besu.enclave.types.SendResponse;
 import org.hyperledger.besu.ethereum.chain.Blockchain;
 import org.hyperledger.besu.ethereum.core.PrivacyParameters;
+import org.hyperledger.besu.ethereum.privacy.storage.ExtendedPrivacyStorage;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivateStateStorage;
 import org.hyperledger.besu.ethereum.rlp.BytesValueRLPOutput;
 
 import java.math.BigInteger;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -36,6 +38,8 @@ public class RestrictedDefaultPrivacyController extends AbstractRestrictedPrivac
 
   private static final Logger LOG =
       LoggerFactory.getLogger(RestrictedDefaultPrivacyController.class);
+
+  private final ExtendedPrivacyStorage extendedPrivacyStorage;
 
   public RestrictedDefaultPrivacyController(
       final Blockchain blockchain,
@@ -52,7 +56,8 @@ public class RestrictedDefaultPrivacyController extends AbstractRestrictedPrivac
         privateTransactionSimulator,
         privateNonceProvider,
         privateWorldStateReader,
-        privacyParameters.getPrivateStateRootResolver());
+        privacyParameters.getPrivateStateRootResolver(),
+        privacyParameters.getExtendedPrivacyStorage());
   }
 
   public RestrictedDefaultPrivacyController(
@@ -63,7 +68,8 @@ public class RestrictedDefaultPrivacyController extends AbstractRestrictedPrivac
       final PrivateTransactionSimulator privateTransactionSimulator,
       final PrivateNonceProvider privateNonceProvider,
       final PrivateWorldStateReader privateWorldStateReader,
-      final PrivateStateRootResolver privateStateRootResolver) {
+      final PrivateStateRootResolver privateStateRootResolver,
+      final ExtendedPrivacyStorage extendedPrivacyStorage) {
     super(
         blockchain,
         privateStateStorage,
@@ -73,6 +79,8 @@ public class RestrictedDefaultPrivacyController extends AbstractRestrictedPrivac
         privateNonceProvider,
         privateWorldStateReader,
         privateStateRootResolver);
+
+    this.extendedPrivacyStorage = extendedPrivacyStorage;
   }
 
   @Override
@@ -83,6 +91,7 @@ public class RestrictedDefaultPrivacyController extends AbstractRestrictedPrivac
     PrivateTransaction toSendTransaction;
 
     if(privateTransaction.hasExtendedPrivacy()){
+      LOG.info("[RestrictedDefaultPrivacyController] hasExtendedPrivacy");
       // set privateArgs to 0x00
       toSendTransaction = blindPrivateTransaction(privateTransaction);
     } else {
@@ -97,11 +106,45 @@ public class RestrictedDefaultPrivacyController extends AbstractRestrictedPrivac
 
     if(privateTransaction.hasExtendedPrivacy()) {
       Bytes privateArgs = privateTransaction.getPrivateArgs().get();
-      LOG.info("Saving into privateStorage ({}, {})", key, privateArgs.toHexString());
-      // TODO: save into storage (key, privateArgs)
+      if(privateTransaction.isContractCreation()) {
+        privateArgs = extractArguments(privateArgs, true);
+      } else {
+        privateArgs = extractArguments(privateArgs, false);
+      }
+      LOG.info("[RestrictedDefaultPrivacyController] Saving into privateStorage ({}, {})", key, privateArgs.toHexString());
+      ExtendedPrivacyStorage.Updater updater = extendedPrivacyStorage.updater();
+      updater.putPrivateArgs(Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))), privateArgs);
+      updater.commit();
     }
 
     return key;
+  }
+
+  private Bytes extractArguments(final Bytes privateArgs, final boolean isContractCreation) {
+    int referenceLength = 64;
+    List<String> listPrivateArgs = new ArrayList<>();
+    String strPrivateArgs = privateArgs.toHexString().substring(2, privateArgs.toHexString().length());
+    int items = strPrivateArgs.length() / referenceLength;
+    for(int i = 0; i < items; i++) {
+      listPrivateArgs.add(strPrivateArgs.substring(i * referenceLength, (i + 1) * referenceLength));
+    }
+    List<String> resultList = new ArrayList<>();
+    if(isContractCreation) {
+      int length = Integer.parseInt(listPrivateArgs.get(4));
+      for(int j = 5; j < 5 + length; j++) {
+        resultList.add(listPrivateArgs.get(j));
+      }
+    } else {
+      int length = Integer.parseInt(listPrivateArgs.get(1));
+      for(int j = 2; j < 2 + length; j++) {
+        resultList.add(listPrivateArgs.get(j));
+      }
+    }
+    String res = "0x";
+    for(String x : resultList) {
+      res = res + x;
+    }
+    return Bytes.fromHexString(res);
   }
 
   private PrivateTransaction blindPrivateTransaction(final PrivateTransaction privateTransaction) {

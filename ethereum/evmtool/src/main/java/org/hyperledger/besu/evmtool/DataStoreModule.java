@@ -55,6 +55,15 @@ public class DataStoreModule {
 
   @Provides
   @Singleton
+  @Named("extendedPrivacy")
+  KeyValueStorage provideExtendedPrivacyKeyValueStorage(
+          @Named("KeyValueStorageName") final String keyValueStorageName,
+          final BesuConfiguration commonConfiguration) {
+    return new InMemoryKeyValueStorage();
+  }
+
+  @Provides
+  @Singleton
   @Named("blockchain")
   KeyValueStorage provideBlockchainKeyValueStorage(
       @Named("KeyValueStorageName") final String keyValueStorageName,

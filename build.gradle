@@ -557,7 +557,7 @@ task autocomplete(type: JavaExec) {
   }
 }
 
-installDist { dependsOn checkLicenses }
+//installDist { dependsOn checkLicenses }
 
 distTar {
   dependsOn checkLicenses, autocomplete

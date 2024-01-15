@@ -98,9 +98,6 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
             return Bytes.EMPTY;
         }
 
-        /*final org.hyperledger.besu.plugin.data.Hash pmtHash =
-                messageFrame.getContextVariable(KEY_TRANSACTION_HASH);*/
-
         final String key = input.toBase64String();
         final ReceiveResponse receiveResponse;
         try {
@@ -152,9 +149,7 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
         }
         LOG.info("[PsiPrecompiledContract] -> psi done");
 
-        /*LOG.debug("Processing private transaction {} in privacy group {}", pmtHash, privacyGroupId);
-
-        final PrivateMetadataUpdater privateMetadataUpdater =
+        /*final PrivateMetadataUpdater privateMetadataUpdater =
                 messageFrame.getContextVariable(KEY_PRIVATE_METADATA_UPDATER);
         final Hash lastRootHash =
                 privateStateRootResolver.resolveLastStateRoot(privacyGroupId, privateMetadataUpdater);

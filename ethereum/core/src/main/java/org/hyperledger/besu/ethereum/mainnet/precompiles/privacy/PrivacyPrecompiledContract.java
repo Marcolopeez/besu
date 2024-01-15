@@ -35,6 +35,7 @@ import org.hyperledger.besu.ethereum.privacy.PrivateStateRootResolver;
 import org.hyperledger.besu.ethereum.privacy.PrivateTransaction;
 import org.hyperledger.besu.ethereum.privacy.PrivateTransactionProcessor;
 import org.hyperledger.besu.ethereum.privacy.PrivateTransactionReceipt;
+import org.hyperledger.besu.ethereum.privacy.storage.ExtendedPrivacyStorage;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivateMetadataUpdater;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivateTransactionMetadata;
 import org.hyperledger.besu.ethereum.processing.TransactionProcessingResult;
@@ -49,7 +50,13 @@ import org.hyperledger.besu.evm.tracing.OperationTracer;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
 import org.hyperledger.besu.plugin.data.Hash;
 
+import java.nio.charset.Charset;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Base64;
+import java.util.List;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.Bytes32;
@@ -63,6 +70,8 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
   private final PrivateStateGenesisAllocator privateStateGenesisAllocator;
   PrivateTransactionProcessor privateTransactionProcessor;
 
+  private final ExtendedPrivacyStorage extendedPrivacyStorage;
+
   private static final Logger LOG = LoggerFactory.getLogger(PrivacyPrecompiledContract.class);
 
   public PrivacyPrecompiledContract(
@@ -75,7 +84,8 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
         privacyParameters.getPrivateWorldStateArchive(),
         privacyParameters.getPrivateStateRootResolver(),
         privacyParameters.getPrivateStateGenesisAllocator(),
-        name);
+        name,
+        privacyParameters.getExtendedPrivacyStorage());
   }
 
   protected PrivacyPrecompiledContract(
@@ -90,6 +100,23 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
     this.privateWorldStateArchive = worldStateArchive;
     this.privateStateRootResolver = privateStateRootResolver;
     this.privateStateGenesisAllocator = privateStateGenesisAllocator;
+    this.extendedPrivacyStorage = null;
+  }
+
+  protected PrivacyPrecompiledContract(
+          final GasCalculator gasCalculator,
+          final Enclave enclave,
+          final WorldStateArchive worldStateArchive,
+          final PrivateStateRootResolver privateStateRootResolver,
+          final PrivateStateGenesisAllocator privateStateGenesisAllocator,
+          final String name,
+          final ExtendedPrivacyStorage extendedPrivacyStorage) {
+    super(name, gasCalculator);
+    this.enclave = enclave;
+    this.privateWorldStateArchive = worldStateArchive;
+    this.privateStateRootResolver = privateStateRootResolver;
+    this.privateStateGenesisAllocator = privateStateGenesisAllocator;
+    this.extendedPrivacyStorage = extendedPrivacyStorage;
   }
 
   public void setPrivateTransactionProcessor(
@@ -152,14 +179,6 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
       throw new IllegalStateException("Can not communicate with enclave, is it up?", e);
     }
 
-    if (privateTransaction.hasExtendedPrivacy()) {
-      LOG.info("[PrivacyPrecompileContract] Transaction hasExtendedPrivacy");
-      System.out.println("ExtendedPrivacy: "+privateTransaction.getExtendedPrivacy());
-
-      final Bytes result = privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
-      System.out.println("Result: "+result);
-    }
-
     LOG.debug("Processing private transaction {} in privacy group {}", pmtHash, privacyGroupId);
 
     final PrivateMetadataUpdater privateMetadataUpdater =
@@ -178,6 +197,18 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
         privateWorldStateUpdater,
         privacyGroupId,
         messageFrame.getBlockValues().getNumber());
+
+    if (privateTransaction.hasExtendedPrivacy()) {
+      LOG.info("[PrivacyPrecompileContract] Transaction hasExtendedPrivacy: ", privateTransaction.getExtendedPrivacy());
+      Optional<Bytes> privArgs = extendedPrivacyStorage.getPrivateArgs(Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))));
+      if(privArgs.isPresent()) {
+        LOG.info("[PrivacyPrecompiledContract] privateArgs: ({}, {})", key, privArgs.get().toHexString());
+      } else {
+          LOG.info("[PrivacyPrecompiledContract] privateArgs: ({}, NOT PRESENT)", key);
+      }
+      final Bytes result = privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
+      System.out.println("Result: "+result);
+    }
 
     final TransactionProcessingResult result =
         processPrivateTransaction(
