@@ -14,8 +14,13 @@ public class ExtendedPrivacyKeyValueStorage implements ExtendedPrivacyStorage {
   }
 
   @Override
-  public Optional<Bytes> getPrivateArgs(final Bytes key) {
-    return get(key);
+  public Optional<Bytes> getPrivateArgsByPmt(final Bytes pmt) {
+    return get(pmt);
+  }
+
+  @Override
+  public Optional<Bytes> getPmtByContractAddress(final Bytes contractAddress) {
+    return get(contractAddress);
   }
 
   private Optional<Bytes> get(final Bytes key) {
@@ -36,9 +41,16 @@ public class ExtendedPrivacyKeyValueStorage implements ExtendedPrivacyStorage {
     }
 
     @Override
-    public ExtendedPrivacyStorage.Updater putPrivateArgs(
-            final Bytes key, final Bytes privateArgs) {
-      set(key, privateArgs);
+    public ExtendedPrivacyStorage.Updater putPrivateArgsByPmt(
+            final Bytes pmt, final Bytes privateArgs) {
+      set(pmt, privateArgs);
+      return this;
+    }
+
+    @Override
+    public ExtendedPrivacyStorage.Updater putPmtByContractAddress(
+            final Bytes contractAddress, final Bytes pmt) {
+      set(contractAddress, pmt);
       return this;
     }
 
@@ -52,8 +64,8 @@ public class ExtendedPrivacyKeyValueStorage implements ExtendedPrivacyStorage {
       transaction.rollback();
     }
 
-    private void set(final Bytes key, final Bytes privateArgs) {
-      transaction.put(key.toArray(), privateArgs.toArray());
+    private void set(final Bytes key, final Bytes value) {
+      transaction.put(key.toArray(), value.toArray());
     }
 
     @Override

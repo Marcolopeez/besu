@@ -113,7 +113,7 @@ public class RestrictedDefaultPrivacyController extends AbstractRestrictedPrivac
       }
       LOG.info("[RestrictedDefaultPrivacyController] Saving into privateStorage ({}, {})", key, privateArgs.toHexString());
       ExtendedPrivacyStorage.Updater updater = extendedPrivacyStorage.updater();
-      updater.putPrivateArgs(Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))), privateArgs);
+      updater.putPrivateArgsByPmt(Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))), privateArgs);
       updater.commit();
     }
 

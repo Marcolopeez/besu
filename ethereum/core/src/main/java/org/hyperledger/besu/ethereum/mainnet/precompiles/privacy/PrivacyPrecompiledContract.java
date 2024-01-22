@@ -14,6 +14,8 @@
  */
 package org.hyperledger.besu.ethereum.mainnet.precompiles.privacy;
 
+import org.hyperledger.besu.datatypes.Address;
+import org.hyperledger.besu.datatypes.Wei;
 import static org.hyperledger.besu.datatypes.Hash.fromPlugin;
 import static org.hyperledger.besu.ethereum.mainnet.PrivateStateUtils.KEY_IS_PERSISTING_PRIVATE_STATE;
 import static org.hyperledger.besu.ethereum.mainnet.PrivateStateUtils.KEY_PRIVATE_METADATA_UPDATER;
@@ -42,6 +44,10 @@ import org.hyperledger.besu.ethereum.processing.TransactionProcessingResult;
 import org.hyperledger.besu.ethereum.rlp.BytesValueRLPInput;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateArchive;
 import org.hyperledger.besu.evm.Gas;
+import org.hyperledger.besu.evm.account.Account;
+import org.hyperledger.besu.evm.account.AccountState;
+import org.hyperledger.besu.evm.account.EvmAccount;
+import org.hyperledger.besu.evm.account.MutableAccount;
 import org.hyperledger.besu.evm.frame.BlockValues;
 import org.hyperledger.besu.evm.frame.MessageFrame;
 import org.hyperledger.besu.evm.gascalculator.GasCalculator;
@@ -52,7 +58,6 @@ import org.hyperledger.besu.plugin.data.Hash;
 
 import java.nio.charset.Charset;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
@@ -200,12 +205,49 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
 
     if (privateTransaction.hasExtendedPrivacy()) {
       LOG.info("[PrivacyPrecompileContract] Transaction hasExtendedPrivacy: ", privateTransaction.getExtendedPrivacy());
-      Optional<Bytes> privArgs = extendedPrivacyStorage.getPrivateArgs(Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))));
+
+      if(privateTransaction.isContractCreation()){
+        final Address senderAddress = privateTransaction.getSender();
+        final EvmAccount maybePrivateSender = privateWorldStateUpdater.getAccount(senderAddress);
+        final MutableAccount sender =
+                maybePrivateSender != null
+                        ? maybePrivateSender.getMutable()
+                        : privateWorldStateUpdater.createAccount(senderAddress, 0, Wei.ZERO).getMutable();
+        final long nonce = sender.getNonce();
+
+        final Address privateContractAddress =
+                Address.privateContractAddress(senderAddress, nonce, privacyGroupId);
+
+        LOG.info(
+                "[PrivacyPrecompileContract] Calculated contract address {} from sender {} with nonce {} and privacy group {}",
+                privateContractAddress.toString(),
+                senderAddress,
+                nonce,
+                privacyGroupId.toString());
+
+        ExtendedPrivacyStorage.Updater updater = extendedPrivacyStorage.updater();
+        updater.putPmtByContractAddress(privateContractAddress, Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))));
+        updater.commit();
+        LOG.info("[PrivacyPrecompiledContract] Contract-Key: ({}, {})", privateContractAddress.toString(), key);
+      }
+
+      Optional<Bytes> privArgs = extendedPrivacyStorage.getPrivateArgsByPmt(Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))));
       if(privArgs.isPresent()) {
         LOG.info("[PrivacyPrecompiledContract] privateArgs: ({}, {})", key, privArgs.get().toHexString());
-      } else {
+      } else if(!privateTransaction.isContractCreation()){s
+        Optional<Bytes> retrievedKey = extendedPrivacyStorage.getPmtByContractAddress(privateTransaction.getTo().get());
+        if(retrievedKey.isPresent()) {
+          privArgs = extendedPrivacyStorage.getPrivateArgsByPmt(retrievedKey.get());
+          if(privArgs.isPresent()) {
+            LOG.info("[PrivacyPrecompiledContract] privateArgs: ({}, {})", new String(retrievedKey.get().toArray(), Charset.forName("UTF-8")), privArgs.get().toHexString());
+          }else{
+            LOG.info("[PrivacyPrecompiledContract] privateArgs: ({}, NOT PRESENT)", new String(retrievedKey.get().toArray(), Charset.forName("UTF-8")));
+          }
+        }else{
           LOG.info("[PrivacyPrecompiledContract] privateArgs: ({}, NOT PRESENT)", key);
+        }
       }
+
       final Bytes result = privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
       System.out.println("Result: "+result);
     }
