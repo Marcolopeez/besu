@@ -204,9 +204,9 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
         messageFrame.getBlockValues().getNumber());
 
     if (privateTransaction.hasExtendedPrivacy()) {
-      LOG.info("[PrivacyPrecompileContract] Transaction hasExtendedPrivacy: ", privateTransaction.getExtendedPrivacy());
+      LOG.info("[PrivacyPrecompileContract] Transaction hasExtendedPrivacy: {}", privateTransaction.getExtendedPrivacy().get().toHexString());
 
-      if(privateTransaction.isContractCreation()){
+      if(privateTransaction.isContractCreation() && extendedPrivacyStorage.getPrivateArgsByPmt(Bytes.wrap(key.getBytes(Charset.forName("UTF-8")))).isPresent()){
         final Address senderAddress = privateTransaction.getSender();
         final EvmAccount maybePrivateSender = privateWorldStateUpdater.getAccount(senderAddress);
         final MutableAccount sender =
@@ -231,25 +231,10 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
         LOG.info("[PrivacyPrecompiledContract] Contract-Key: ({}, {})", privateContractAddress.toString(), key);
       }
 
-      Optional<Bytes> privArgs = extendedPrivacyStorage.getPrivateArgsByPmt(Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))));
-      if(privArgs.isPresent()) {
-        LOG.info("[PrivacyPrecompiledContract] privateArgs: ({}, {})", key, privArgs.get().toHexString());
-      } else if(!privateTransaction.isContractCreation()){s
-        Optional<Bytes> retrievedKey = extendedPrivacyStorage.getPmtByContractAddress(privateTransaction.getTo().get());
-        if(retrievedKey.isPresent()) {
-          privArgs = extendedPrivacyStorage.getPrivateArgsByPmt(retrievedKey.get());
-          if(privArgs.isPresent()) {
-            LOG.info("[PrivacyPrecompiledContract] privateArgs: ({}, {})", new String(retrievedKey.get().toArray(), Charset.forName("UTF-8")), privArgs.get().toHexString());
-          }else{
-            LOG.info("[PrivacyPrecompiledContract] privateArgs: ({}, NOT PRESENT)", new String(retrievedKey.get().toArray(), Charset.forName("UTF-8")));
-          }
-        }else{
-          LOG.info("[PrivacyPrecompiledContract] privateArgs: ({}, NOT PRESENT)", key);
-        }
+      if(!privateTransaction.isContractCreation()){
+        final Bytes result = privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
+        LOG.info("[PrivacyPrecompiledContract] Result: {}", new String(result.toArray(), Charset.forName("UTF-8")));
       }
-
-      final Bytes result = privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
-      System.out.println("Result: "+result);
     }
 
     final TransactionProcessingResult result =

@@ -20,18 +20,16 @@ import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.concurrent.TimeUnit;
+import java.util.HashSet;
 import java.util.Properties;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 
 
 public class PsiMain {
     private static final Logger LOGGER = LoggerFactory.getLogger(PsiMain.class);
 
-    //private static final SecureRandom SECURE_RANDOM = new SecureRandom();
-
-
-    private static final int ELEMENT_BYTE_LENGTH = CommonConstants.BLOCK_BYTE_LENGTH;
+    //private static final int ELEMENT_BYTE_LENGTH = CommonConstants.BLOCK_BYTE_LENGTH;
 
     public static PsiConfig buildPsiType(final String psiType){
         switch (psiType) {
@@ -50,9 +48,16 @@ public class PsiMain {
         }
     }
 
-    public static void main(final String[] args) throws Exception {
+    public static void printIntersection(final Set<ByteBuffer> intersectionSet){
+        // Imprimir IntersectionSet
+        LOGGER.info("IntersectionSet: {}", setToString(intersectionSet));
+    }
+
+    public static Set<ByteBuffer> main(final String[] args) throws Exception {
         // Configurar opciones de VM
         configurarOpcionesVM();
+
+        ResultHolder resultHolder = new ResultHolder();
 
         PsiConfig config;
         Rpc serverRpc;
@@ -72,27 +77,28 @@ public class PsiMain {
 
         config = buildPsiType(args[0]);
 
-
         PsiServer<ByteBuffer> server = PsiFactory.createServer(serverRpc, clientRpc.ownParty(), config);
         PsiClient<ByteBuffer> client = PsiFactory.createClient(clientRpc, serverRpc.ownParty(), config);
 
         server.setTaskId(5);
         client.setTaskId(5);
 
-        int serverSize = 1;
-        int clientSize = 1;
+        byte[] bytesServerSet = hexStringToByteArray(args[1].substring(2)); // (PrivateArgs without '0x')
+        byte[] bytesClientSet = hexStringToByteArray(args[2].substring(2));
+
+        Set<ByteBuffer> serverSet = convertByteArrayToByteBufferSet(bytesServerSet);
+        Set<ByteBuffer> clientSet = convertByteArrayToByteBufferSet(bytesClientSet);
+
+        //LOGGER.info("ServerSet: {}", setToString(serverSet));
+        //LOGGER.info("ClientSet: {}", setToString(clientSet));
 
         try {
             LOGGER.info("-----test {}，server_size = {}，client_size = {}-----",
-                    server.getPtoDesc().getPtoName(), serverSize, clientSize
+                    server.getPtoDesc().getPtoName(), serverSet.size(), clientSet.size()
             );
-            // 生成集合
-            ArrayList<Set<ByteBuffer>> sets = PsoUtils.generateBytesSets(serverSize, clientSize, ELEMENT_BYTE_LENGTH);
-            Set<ByteBuffer> serverSet = sets.get(0);
-            Set<ByteBuffer> clientSet = sets.get(1);
 
             PsiServerThread serverThread = new PsiServerThread(server, serverSet, clientSet.size());
-            PsiClientThread clientThread = new PsiClientThread(client, clientSet, serverSet.size());
+            PsiClientThread clientThread = new PsiClientThread(client, clientSet, serverSet.size(), resultHolder);
             StopWatch stopWatch = new StopWatch();
 
             stopWatch.start();
@@ -112,11 +118,17 @@ public class PsiMain {
                     clientRpc.getSendDataPacketNum(), clientRpc.getPayloadByteLength(), clientRpc.getSendByteLength(),
                     time
             );
+
+            //LOGGER.info("Intersection: {}", setToString(resultHolder.getIntersectionSet()));
+
             serverRpc.reset();
             clientRpc.reset();
 
+            return resultHolder.getIntersectionSet();
+
         } catch (InterruptedException e) {
             LOGGER.error("Ocurrió un error: " + e.getMessage(), e);
+            return new HashSet<>();
         }
     }
 
@@ -134,5 +146,43 @@ public class PsiMain {
             // Manejar la excepción si la carga de la biblioteca falla
             System.err.println("Error al cargar la biblioteca nativa: " + e.getMessage());
         }
+    }
+
+    private static Set<ByteBuffer> convertByteArrayToByteBufferSet(final byte[] byteArray) {
+        Set<ByteBuffer> byteBufferSet = new HashSet<>();
+        int blockSize = 32;
+
+        for (int i = 0; i < byteArray.length; i += blockSize) {
+            int endIndex = Math.min(i + blockSize, byteArray.length);
+            byte[] blockBytes = new byte[endIndex - i];
+            System.arraycopy(byteArray, i, blockBytes, 0, blockBytes.length);
+            ByteBuffer byteBuffer = ByteBuffer.wrap(blockBytes);
+            byteBufferSet.add(byteBuffer);
+        }
+
+        return byteBufferSet;
+    }
+
+    private static byte[] hexStringToByteArray(final String hexString) {
+        int len = hexString.length();
+        byte[] data = new byte[len / 2];
+        for (int i = 0; i < len; i += 2) {
+            data[i / 2] = (byte) ((Character.digit(hexString.charAt(i), 16) << 4)
+                    + Character.digit(hexString.charAt(i + 1), 16));
+        }
+        return data;
+    }
+
+    private static String setToString(final Set<ByteBuffer> set) {
+        StringBuilder hexString = new StringBuilder("0x");
+        for (ByteBuffer byteBuffer : set) {
+            byte[] bytes = new byte[byteBuffer.limit()];
+            byteBuffer.rewind();
+            byteBuffer.get(bytes);
+            for (byte b : bytes) {
+                hexString.append(String.format("%02X", b));
+            }
+        }
+        return hexString.toString().trim();
     }
 }

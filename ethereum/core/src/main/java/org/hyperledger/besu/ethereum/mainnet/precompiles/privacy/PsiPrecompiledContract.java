@@ -21,6 +21,7 @@ import org.hyperledger.besu.ethereum.privacy.PrivateStateRootResolver;
 import org.hyperledger.besu.ethereum.privacy.PrivateTransaction;
 import org.hyperledger.besu.ethereum.privacy.PrivateTransactionProcessor;
 import org.hyperledger.besu.ethereum.privacy.PrivateTransactionReceipt;
+import org.hyperledger.besu.ethereum.privacy.storage.ExtendedPrivacyStorage;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivateMetadataUpdater;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivateTransactionMetadata;
 import org.hyperledger.besu.ethereum.processing.TransactionProcessingResult;
@@ -36,7 +37,14 @@ import org.hyperledger.besu.evm.worldstate.WorldUpdater;
 import org.hyperledger.besu.plugin.data.Hash;
 import org.hyperledger.besu.psi.PsiMain;
 
+import java.nio.ByteBuffer;
+import java.nio.charset.Charset;
+import java.util.ArrayList;
 import java.util.Base64;
+import java.util.List;
+import java.util.Optional;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.Bytes32;
@@ -50,6 +58,7 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
     final PrivateStateRootResolver privateStateRootResolver;
     private final PrivateStateGenesisAllocator privateStateGenesisAllocator;
     PrivateTransactionProcessor privateTransactionProcessor;
+    private final ExtendedPrivacyStorage extendedPrivacyStorage;
 
     private static final Logger LOG = LoggerFactory.getLogger(PsiPrecompiledContract.class);
 
@@ -63,7 +72,8 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
                 privacyParameters.getPrivateWorldStateArchive(),
                 privacyParameters.getPrivateStateRootResolver(),
                 privacyParameters.getPrivateStateGenesisAllocator(),
-                name);
+                name,
+                privacyParameters.getExtendedPrivacyStorage());
     }
 
     protected PsiPrecompiledContract(
@@ -78,8 +88,24 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
         this.privateWorldStateArchive = worldStateArchive;
         this.privateStateRootResolver = privateStateRootResolver;
         this.privateStateGenesisAllocator = privateStateGenesisAllocator;
+        this.extendedPrivacyStorage = null;
         LOG.info("[PsiPrecompiledContract] -> created");
+    }
 
+    protected PsiPrecompiledContract(
+            final GasCalculator gasCalculator,
+            final Enclave enclave,
+            final WorldStateArchive worldStateArchive,
+            final PrivateStateRootResolver privateStateRootResolver,
+            final PrivateStateGenesisAllocator privateStateGenesisAllocator,
+            final String name,
+            final ExtendedPrivacyStorage extendedPrivacyStorage) {
+        super(name, gasCalculator);
+        this.enclave = enclave;
+        this.privateWorldStateArchive = worldStateArchive;
+        this.privateStateRootResolver = privateStateRootResolver;
+        this.privateStateGenesisAllocator = privateStateGenesisAllocator;
+        this.extendedPrivacyStorage = extendedPrivacyStorage;
     }
 
     public void setPrivateTransactionProcessor(
@@ -139,35 +165,54 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
             throw new IllegalStateException("Can not communicate with enclave, is it up?", e);
         }
 
-        LOG.info("[PsiPrecompiledContract] -> executing psi");
-        try{
-            String[] psiMainArgs = {"HFH99_ECC_COMPRESS"};
-            PsiMain.main(psiMainArgs);
-        }catch(Exception e) {
-            LOG.error("[PsiPrecompiledContract] -> Ocurrió un error: " + e.getMessage(), e);
-            return Bytes.EMPTY;
+        Bytes result = Bytes.EMPTY;
+        if(!privateTransaction.isContractCreation()) {
+            Optional<Bytes> privArgs = extendedPrivacyStorage.getPrivateArgsByPmt(Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))));
+            if (privArgs.isPresent()) {
+                //LOG.info("[PrivacyPrecompiledContract] CLIENT privateArgs: ({}, {})", key, privArgs.get().toHexString());
+                LOG.info("[PsiPrecompiledContract] -> executing psi");
+                try {
+                    String psiType = "HFH99_ECC_COMPRESS";
+                    String serverSet = "0x000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000030000000000000000000000000000000000000000000000000000000000000004";
+                    String clientSet = privArgs.get().toHexString();
+                    String[] psiMainArgs = {psiType, serverSet, clientSet};
+                    Set<ByteBuffer> intersectionSet = PsiMain.main(psiMainArgs);
+                    String intersection = setToString(intersectionSet);
+                    //LOG.info("[PsiPrecompiledContract] -> SET INTERSECTION: {}", intersection);
+                    result = Bytes.wrap(intersection.getBytes(Charset.forName("UTF-8")));
+                } catch (Exception e) {
+                    LOG.error("[PsiPrecompiledContract] -> Ocurrió un error: " + e.getMessage(), e);
+                }
+                LOG.info("[PsiPrecompiledContract] -> psi done");
+            } else {
+                Optional<Bytes> retrievedKey = extendedPrivacyStorage.getPmtByContractAddress(privateTransaction.getTo().get());
+                if (retrievedKey.isPresent()) {
+                    privArgs = extendedPrivacyStorage.getPrivateArgsByPmt(retrievedKey.get());
+                    if (privArgs.isPresent()) {
+                        //LOG.info("[PrivacyPrecompiledContract] SERVER privateArgs: ({}, {})", new String(retrievedKey.get().toArray(), Charset.forName("UTF-8")), privArgs.get().toHexString());
+                        LOG.info("[PsiPrecompiledContract] -> executing psi");
+                        try {
+                            String psiType = "HFH99_ECC_COMPRESS";
+                            String serverSet = privArgs.get().toHexString();
+                            String clientSet = "0x000000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000010000000000000000000000000000000000000000000000000000000000000006";
+                            String[] psiMainArgs = {psiType, serverSet, clientSet};
+                            Set<ByteBuffer> intersectionSet = PsiMain.main(psiMainArgs);
+                            String intersection = setToString(intersectionSet);
+                            //LOG.info("[PsiPrecompiledContract] -> SET INTERSECTION: {}", intersection);
+                            result = Bytes.wrap(intersection.getBytes(Charset.forName("UTF-8")));
+                        } catch (Exception e) {
+                            LOG.error("[PsiPrecompiledContract] -> Ocurrió un error: " + e.getMessage(), e);
+                        }
+                    } else {
+                        LOG.info("[PrivacyPrecompiledContract] privateArgs: ({}, NOT PRESENT)", new String(retrievedKey.get().toArray(), Charset.forName("UTF-8")));
+                    }
+                } else {
+                    LOG.info("[PrivacyPrecompiledContract] privateArgs: ({}, NOT PRESENT)", key);
+                }
+            }
         }
-        LOG.info("[PsiPrecompiledContract] -> psi done");
 
-        /*final PrivateMetadataUpdater privateMetadataUpdater =
-                messageFrame.getContextVariable(KEY_PRIVATE_METADATA_UPDATER);
-        final Hash lastRootHash =
-                privateStateRootResolver.resolveLastStateRoot(privacyGroupId, privateMetadataUpdater);
-
-        final MutableWorldState disposablePrivateState =
-                privateWorldStateArchive.getMutable(fromPlugin(lastRootHash), null).get();
-
-        final WorldUpdater privateWorldStateUpdater = disposablePrivateState.updater();
-
-        maybeApplyGenesisToPrivateWorldState(
-                lastRootHash,
-                disposablePrivateState,
-                privateWorldStateUpdater,
-                privacyGroupId,
-                messageFrame.getBlockValues().getNumber());*/
-
-
-        return Bytes.of((byte) 0x01);
+        return result;
     }
 
     protected void maybeApplyGenesisToPrivateWorldState(
@@ -241,5 +286,25 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
         }
 
         return true;
+    }
+
+    private static String setToString(final Set<ByteBuffer> set) {
+        StringBuilder hexString = new StringBuilder("0x");
+        for (ByteBuffer byteBuffer : set) {
+            // Crear un array de bytes para almacenar los datos del ByteBuffer
+            byte[] bytes = new byte[byteBuffer.limit()];
+
+            // Rebobinar el ByteBuffer para leer desde el principio
+            byteBuffer.rewind();
+
+            // Copiar los datos del ByteBuffer al array de bytes
+            byteBuffer.get(bytes);
+
+            // Convertir el array de bytes a una cadena en formato hexadecimal
+            for (byte b : bytes) {
+                hexString.append(String.format("%02X", b));
+            }
+        }
+        return hexString.toString().trim();
     }
 }
