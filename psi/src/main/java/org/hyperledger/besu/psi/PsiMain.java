@@ -3,7 +3,11 @@ package org.hyperledger.besu.psi;
 
 import edu.alibaba.mpc4j.common.rpc.Rpc;
 import edu.alibaba.mpc4j.common.rpc.RpcManager;
+import edu.alibaba.mpc4j.common.rpc.impl.memory.MemoryRpc;
 import edu.alibaba.mpc4j.common.rpc.impl.memory.MemoryRpcManager;
+import edu.alibaba.mpc4j.common.rpc.impl.netty.NettyParty;
+import edu.alibaba.mpc4j.common.rpc.impl.netty.NettyRpc;
+import edu.alibaba.mpc4j.common.rpc.impl.netty.NettyRpcManager;
 import edu.alibaba.mpc4j.common.tool.CommonConstants;
 import edu.alibaba.mpc4j.common.tool.hashbin.object.cuckoo.CuckooHashBinFactory.CuckooHashBinType;
 import edu.alibaba.mpc4j.s2pc.pso.PsoUtils;
@@ -19,6 +23,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.nio.ByteBuffer;
+import java.io.IOException;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.util.ArrayList;
 import java.util.concurrent.TimeUnit;
 import java.util.HashSet;
@@ -60,75 +67,104 @@ public class PsiMain {
         ResultHolder resultHolder = new ResultHolder();
 
         PsiConfig config;
-        Rpc serverRpc;
-        Rpc clientRpc;
+        NettyParty clientParty;
+        NettyParty serverParty;
+        Set<NettyParty> nettyPartySet;
+        NettyRpc serverRpc;
+        NettyRpc clientRpc;
 
         LOGGER.info("read log config");
         Properties log4jProperties = new Properties();
         log4jProperties.load(PsiMain.class.getResourceAsStream("/log4j.properties"));
         PropertyConfigurator.configure(log4jProperties);
 
-        LOGGER.info("create rpc for client and server");
-        RpcManager rpcManager = new MemoryRpcManager(2);
-        serverRpc = rpcManager.getRpc(0);
-        clientRpc = rpcManager.getRpc(1);
+        nettyPartySet = new HashSet<>(2);
+        clientParty = new NettyParty(
+                0, "P_1", "0.0.0.0", 23812
+        );
+        nettyPartySet.add(clientParty);
+        serverParty = new NettyParty(
+                1, "P_2", "0.0.0.0", 23813
+        );
+        nettyPartySet.add(serverParty);
 
         LOGGER.info("build ");
-
         config = buildPsiType(args[0]);
 
-        PsiServer<ByteBuffer> server = PsiFactory.createServer(serverRpc, clientRpc.ownParty(), config);
-        PsiClient<ByteBuffer> client = PsiFactory.createClient(clientRpc, serverRpc.ownParty(), config);
 
-        server.setTaskId(5);
-        client.setTaskId(5);
+        LOGGER.info("create rpc for client and server");
+        if(args[1].isEmpty()){
+            LOGGER.info("[PsiMain] -> Client! ");
+            clientRpc = new NettyRpc(clientParty, nettyPartySet);
+            PsiClient<ByteBuffer> client = PsiFactory.createClient(clientRpc, serverParty, config);
+            client.setTaskId(5);
+            byte[] bytesClientSet = hexStringToByteArray(args[2].substring(2)); // (PrivateArgs without '0x')
+            Set<ByteBuffer> clientSet = convertByteArrayToByteBufferSet(bytesClientSet);
 
-        byte[] bytesServerSet = hexStringToByteArray(args[1].substring(2)); // (PrivateArgs without '0x')
-        byte[] bytesClientSet = hexStringToByteArray(args[2].substring(2));
+            try {
+                PsiClientThread clientThread = new PsiClientThread(client, clientSet, clientSet.size(), resultHolder);
+                StopWatch stopWatch = new StopWatch();
 
-        Set<ByteBuffer> serverSet = convertByteArrayToByteBufferSet(bytesServerSet);
-        Set<ByteBuffer> clientSet = convertByteArrayToByteBufferSet(bytesClientSet);
+                stopWatch.start();
+                clientThread.start();
 
-        //LOGGER.info("ServerSet: {}", setToString(serverSet));
-        //LOGGER.info("ClientSet: {}", setToString(clientSet));
+                clientThread.join();
+                stopWatch.stop();
+                long time = stopWatch.getTime(TimeUnit.MILLISECONDS);
 
-        try {
-            LOGGER.info("-----test {}，server_size = {}，client_size = {}-----",
-                    server.getPtoDesc().getPtoName(), serverSet.size(), clientSet.size()
-            );
+                LOGGER.info("Client data_packet_num = {}, payload_bytes = {}B, send_bytes = {}B, time = {}ms",
+                        clientRpc.getSendDataPacketNum(), clientRpc.getPayloadByteLength(), clientRpc.getSendByteLength(),
+                        time
+                );
 
-            PsiServerThread serverThread = new PsiServerThread(server, serverSet, clientSet.size());
-            PsiClientThread clientThread = new PsiClientThread(client, clientSet, serverSet.size(), resultHolder);
-            StopWatch stopWatch = new StopWatch();
+                //LOGGER.info("Intersection: {}", setToString(resultHolder.getIntersectionSet()));
 
-            stopWatch.start();
-            serverThread.start();
-            clientThread.start();
+                clientRpc.reset();
 
-            serverThread.join();
-            clientThread.join();
-            stopWatch.stop();
-            long time = stopWatch.getTime(TimeUnit.MILLISECONDS);
+                return resultHolder.getIntersectionSet();
 
-            LOGGER.info("Server data_packet_num = {}, payload_bytes = {}B, send_bytes = {}B, time = {}ms",
-                    serverRpc.getSendDataPacketNum(), serverRpc.getPayloadByteLength(), serverRpc.getSendByteLength(),
-                    time
-            );
-            LOGGER.info("Client data_packet_num = {}, payload_bytes = {}B, send_bytes = {}B, time = {}ms",
-                    clientRpc.getSendDataPacketNum(), clientRpc.getPayloadByteLength(), clientRpc.getSendByteLength(),
-                    time
-            );
+            } catch (InterruptedException e) {
+                LOGGER.error("Ocurrió un error: " + e.getMessage(), e);
+                return new HashSet<>();
+            }
+        }else{
+            LOGGER.info("[PsiMain] -> Server! ");
+            serverRpc = new NettyRpc(serverParty, nettyPartySet);
+            PsiServer<ByteBuffer> server = PsiFactory.createServer(serverRpc, clientParty, config);
+            server.setTaskId(5);
+            byte[] bytesServerSet = hexStringToByteArray(args[1].substring(2)); // (PrivateArgs without '0x')
+            Set<ByteBuffer> serverSet = convertByteArrayToByteBufferSet(bytesServerSet);
 
-            //LOGGER.info("Intersection: {}", setToString(resultHolder.getIntersectionSet()));
+            try {
+                LOGGER.info("-----test {}，server_size = {}，client_size = {}-----",
+                        server.getPtoDesc().getPtoName(), serverSet.size(), serverSet.size() // <- TODO: No siempre tendrán el mismo tamaño
+                );
 
-            serverRpc.reset();
-            clientRpc.reset();
+                PsiServerThread serverThread = new PsiServerThread(server, serverSet, serverSet.size());
+                StopWatch stopWatch = new StopWatch();
 
-            return resultHolder.getIntersectionSet();
+                stopWatch.start();
+                serverThread.start();
 
-        } catch (InterruptedException e) {
-            LOGGER.error("Ocurrió un error: " + e.getMessage(), e);
-            return new HashSet<>();
+                serverThread.join();
+                stopWatch.stop();
+                long time = stopWatch.getTime(TimeUnit.MILLISECONDS);
+
+                LOGGER.info("Server data_packet_num = {}, payload_bytes = {}B, send_bytes = {}B, time = {}ms",
+                        serverRpc.getSendDataPacketNum(), serverRpc.getPayloadByteLength(), serverRpc.getSendByteLength(),
+                        time
+                );
+
+                //LOGGER.info("Intersection: {}", setToString(resultHolder.getIntersectionSet()));
+
+                serverRpc.reset();
+
+                return new HashSet<>();
+
+            } catch (InterruptedException e) {
+                LOGGER.error("Ocurrió un error: " + e.getMessage(), e);
+                return new HashSet<>();
+            }
         }
     }
 
@@ -146,6 +182,19 @@ public class PsiMain {
             // Manejar la excepción si la carga de la biblioteca falla
             System.err.println("Error al cargar la biblioteca nativa: " + e.getMessage());
         }
+    }
+
+    private static String setToString(final Set<ByteBuffer> set) {
+        StringBuilder hexString = new StringBuilder("0x");
+        for (ByteBuffer byteBuffer : set) {
+            byte[] bytes = new byte[byteBuffer.limit()];
+            byteBuffer.rewind();
+            byteBuffer.get(bytes);
+            for (byte b : bytes) {
+                hexString.append(String.format("%02X", b));
+            }
+        }
+        return hexString.toString().trim();
     }
 
     private static Set<ByteBuffer> convertByteArrayToByteBufferSet(final byte[] byteArray) {
@@ -173,16 +222,4 @@ public class PsiMain {
         return data;
     }
 
-    private static String setToString(final Set<ByteBuffer> set) {
-        StringBuilder hexString = new StringBuilder("0x");
-        for (ByteBuffer byteBuffer : set) {
-            byte[] bytes = new byte[byteBuffer.limit()];
-            byteBuffer.rewind();
-            byteBuffer.get(bytes);
-            for (byte b : bytes) {
-                hexString.append(String.format("%02X", b));
-            }
-        }
-        return hexString.toString().trim();
-    }
 }
