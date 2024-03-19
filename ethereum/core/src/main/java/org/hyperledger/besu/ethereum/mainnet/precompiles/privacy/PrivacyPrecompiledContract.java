@@ -206,34 +206,21 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
     if (privateTransaction.hasExtendedPrivacy()) {
       LOG.info("[PrivacyPrecompileContract] Transaction hasExtendedPrivacy: {}", privateTransaction.getExtendedPrivacy().get().toHexString());
 
-      if(privateTransaction.isContractCreation() && extendedPrivacyStorage.getPrivateArgsByPmt(Bytes.wrap(key.getBytes(Charset.forName("UTF-8")))).isPresent()){
-        final Address senderAddress = privateTransaction.getSender();
-        final EvmAccount maybePrivateSender = privateWorldStateUpdater.getAccount(senderAddress);
-        final MutableAccount sender =
-                maybePrivateSender != null
-                        ? maybePrivateSender.getMutable()
-                        : privateWorldStateUpdater.createAccount(senderAddress, 0, Wei.ZERO).getMutable();
-        final long nonce = sender.getNonce();
-
-        final Address privateContractAddress =
-                Address.privateContractAddress(senderAddress, nonce, privacyGroupId);
-
-        LOG.info(
-                "[PrivacyPrecompileContract] Calculated contract address {} from sender {} with nonce {} and privacy group {}",
-                privateContractAddress.toString(),
-                senderAddress,
-                nonce,
-                privacyGroupId.toString());
-
-        ExtendedPrivacyStorage.Updater updater = extendedPrivacyStorage.updater();
-        updater.putPmtByContractAddress(privateContractAddress, Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))));
-        updater.commit();
-        LOG.info("[PrivacyPrecompiledContract] Contract-Key: ({}, {})", privateContractAddress.toString(), key);
-      }
-
-      if(!privateTransaction.isContractCreation()){
-        final Bytes result = privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
-        LOG.info("[PrivacyPrecompiledContract] Result: {}", new String(result.toArray(), Charset.forName("UTF-8")));
+      if(extendedPrivacyStorage.getPrivateArgsByPmt(Bytes.wrap(key.getBytes(Charset.forName("UTF-8")))).isPresent()) {
+        // Client
+        if (privateTransaction.isContractCreation()) {
+          final Address privateContractAddress = getPrivateContractAddress(privateTransaction.getSender(), privateWorldStateUpdater, privacyGroupId);
+          ExtendedPrivacyStorage.Updater updater = extendedPrivacyStorage.updater();
+          updater.putPmtByContractAddress(privateContractAddress, Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))));
+          updater.commit();
+          LOG.info("[PrivacyPrecompiledContract] Contract-Key: ({}, {})", privateContractAddress.toString(), key);
+        } else {
+          final Bytes result = privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
+          LOG.info("[PrivacyPrecompiledContract] Intersection: {}", new String(result.toArray(), Charset.forName("UTF-8")));
+        }
+      } else if (!privateTransaction.isContractCreation()) {
+        // Server
+        privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
       }
     }
 
@@ -261,6 +248,29 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
     }
 
     return result.getOutput();
+  }
+
+  Address getPrivateContractAddress(final Address senderAddress,
+                                    final WorldUpdater privateWorldStateUpdater,
+                                    final Bytes32 privacyGroupId) {
+    final EvmAccount maybePrivateSender = privateWorldStateUpdater.getAccount(senderAddress);
+    final MutableAccount sender =
+            maybePrivateSender != null
+                    ? maybePrivateSender.getMutable()
+                    : privateWorldStateUpdater.createAccount(senderAddress, 0, Wei.ZERO).getMutable();
+    final long nonce = sender.getNonce();
+
+    final Address privateContractAddress =
+            Address.privateContractAddress(senderAddress, nonce, privacyGroupId);
+
+    LOG.info(
+            "[PrivacyPrecompileContract] Calculated contract address {} from sender {} with nonce {} and privacy group {}",
+            privateContractAddress.toString(),
+            senderAddress,
+            nonce,
+            privacyGroupId.toString());
+
+    return privateContractAddress;
   }
 
   protected void maybeApplyGenesisToPrivateWorldState(

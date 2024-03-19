@@ -85,12 +85,12 @@ public class MessageCallProcessor extends AbstractMessageProcessor {
 
   @Override
   public Bytes executeExtendedPrivacyPrecompiled(final String precompiledAddress, final Bytes input, final MessageFrame messageFrame){
-    Bytes output = null;
+    Bytes result = null;
     // Check first if the precompileAddress match
     final PrecompiledContract precompile = precompiles.get(Address.fromHexString(precompiledAddress));
     if (precompile != null) {
-      output = precompile.compute(input, messageFrame);
-      if (output != null) {
+      result = precompile.compute(input, messageFrame);
+      if (result != null) {
         LOG.trace(
                 "Precompiled contract {}  successfully executed",
                 precompile.getName());
@@ -100,7 +100,7 @@ public class MessageCallProcessor extends AbstractMessageProcessor {
     } else {
       LOG.trace("Precompiled contract  {} failed", precompile);
     }
-    return output;
+    return result;
   }
 
   /**

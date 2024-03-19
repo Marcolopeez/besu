@@ -109,9 +109,9 @@ public class PrivateTransactionProcessor {
 
       if (precompiledAddress != null) {
         final AbstractMessageProcessor extendedPrivacyExecutor = messageCallProcessor;
-        final Bytes output = extendedPrivacyExecutor.executeExtendedPrivacyPrecompiled(precompiledAddress, input, messageFrame);
-        if (output != null) {
-          return output;
+        final Bytes result = extendedPrivacyExecutor.executeExtendedPrivacyPrecompiled(precompiledAddress, input, messageFrame);
+        if (result != null) {
+          return result;
         }else{
           return Bytes.EMPTY;
         }
