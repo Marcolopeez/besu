@@ -76,6 +76,7 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
   PrivateTransactionProcessor privateTransactionProcessor;
 
   private final ExtendedPrivacyStorage extendedPrivacyStorage;
+  private PrivateTransaction lastPrivateTransaction;
 
   private static final Logger LOG = LoggerFactory.getLogger(PrivacyPrecompiledContract.class);
 
@@ -106,6 +107,7 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
     this.privateStateRootResolver = privateStateRootResolver;
     this.privateStateGenesisAllocator = privateStateGenesisAllocator;
     this.extendedPrivacyStorage = null;
+    lastPrivateTransaction = new PrivateTransaction.Builder().build();
   }
 
   protected PrivacyPrecompiledContract(
@@ -204,23 +206,30 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
         messageFrame.getBlockValues().getNumber());
 
     if (privateTransaction.hasExtendedPrivacy()) {
-      LOG.info("[PrivacyPrecompileContract] Transaction hasExtendedPrivacy: {}", privateTransaction.getExtendedPrivacy().get().toHexString());
+      if(!privateTransaction.equals(lastPrivateTransaction)){
+        LOG.info("[PrivacyPrecompileContract] Transaction hasExtendedPrivacy: {}", privateTransaction.getExtendedPrivacy().get().toHexString());
+        Optional<Bytes> privArgs = extendedPrivacyStorage.getPrivateArgsByPmt(Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))));
 
-      if(extendedPrivacyStorage.getPrivateArgsByPmt(Bytes.wrap(key.getBytes(Charset.forName("UTF-8")))).isPresent()) {
-        // Client
-        if (privateTransaction.isContractCreation()) {
+        if (privateTransaction.isContractCreation() && privArgs.isPresent()) {
+          // Client deploying contract
           final Address privateContractAddress = getPrivateContractAddress(privateTransaction.getSender(), privateWorldStateUpdater, privacyGroupId);
           ExtendedPrivacyStorage.Updater updater = extendedPrivacyStorage.updater();
           updater.putPmtByContractAddress(privateContractAddress, Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))));
           updater.commit();
           LOG.info("[PrivacyPrecompiledContract] Contract-Key: ({}, {})", privateContractAddress.toString(), key);
-        } else {
-          final Bytes result = privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
-          LOG.info("[PrivacyPrecompiledContract] Intersection: {}", new String(result.toArray(), Charset.forName("UTF-8")));
+        } else if (!privateTransaction.isContractCreation()) {
+          if (privArgs.isPresent()) {
+            // Server
+            privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
+          } else {
+            // Client
+            final Bytes result = privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
+            LOG.info("[PrivacyPrecompiledContract] Intersection: {}", new String(result.toArray(), Charset.forName("UTF-8")));
+          }
         }
-      } else if (!privateTransaction.isContractCreation()) {
-        // Server
-        privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
+        lastPrivateTransaction = privateTransaction;
+      }else{
+        LOG.info("[PrivacyPrecompiledContract] Extended Private transaction has already been computed");
       }
     }
 

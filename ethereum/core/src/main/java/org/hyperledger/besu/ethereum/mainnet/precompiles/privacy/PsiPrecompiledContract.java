@@ -59,7 +59,6 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
     private final PrivateStateGenesisAllocator privateStateGenesisAllocator;
     PrivateTransactionProcessor privateTransactionProcessor;
     private final ExtendedPrivacyStorage extendedPrivacyStorage;
-    private PrivateTransaction lastPrivateTransaction;
 
     private static final Logger LOG = LoggerFactory.getLogger(PsiPrecompiledContract.class);
 
@@ -91,7 +90,6 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
         this.privateStateGenesisAllocator = privateStateGenesisAllocator;
         this.extendedPrivacyStorage = null;
         LOG.info("[PsiPrecompiledContract] -> created");
-        lastPrivateTransaction = new PrivateTransaction.Builder().build();
     }
 
     protected PsiPrecompiledContract(
@@ -170,13 +168,13 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
         Bytes result = Bytes.EMPTY;
         if(!privateTransaction.isContractCreation()) {
             Optional<Bytes> privArgs = extendedPrivacyStorage.getPrivateArgsByPmt(Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))));
-            if ((privArgs.isPresent()) && (!privateTransaction.equals(lastPrivateTransaction))) {
-                //LOG.info("[PrivacyPrecompiledContract] CLIENT privateArgs: ({}, {})", key, privArgs.get().toHexString());
+            if (privArgs.isPresent()) {
+                LOG.info("[PrivacyPrecompiledContract] SERVER privateArgs: ({}, {})", key, privArgs.get().toHexString());
                 LOG.info("[PsiPrecompiledContract] -> executing psi");
                 try {
                     String psiType = "HFH99_ECC_COMPRESS";
-                    String serverSet = "";
-                    String clientSet = privArgs.get().toHexString();
+                    String serverSet = privArgs.get().toHexString();
+                    String clientSet = "";
                     String[] psiMainArgs = {psiType, serverSet, clientSet};
 
                     Set<ByteBuffer> intersectionSet = PsiMain.main(psiMainArgs);
@@ -188,31 +186,25 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
                     LOG.error("[PsiPrecompiledContract] -> Error: " + e.getMessage(), e);
                 }
                 LOG.info("[PsiPrecompiledContract] -> psi done");
-                lastPrivateTransaction = privateTransaction;
             } else {
                 Optional<Bytes> retrievedKey = extendedPrivacyStorage.getPmtByContractAddress(privateTransaction.getTo().get());
                 if (retrievedKey.isPresent()) {
                     privArgs = extendedPrivacyStorage.getPrivateArgsByPmt(retrievedKey.get());
                     if (privArgs.isPresent()) {
-                        if(!privateTransaction.equals(lastPrivateTransaction)){
-                            //LOG.info("[PsiPrecompiledContract] SERVER executing psi - privateArgs: ({}, {})", new String(retrievedKey.get().toArray(), Charset.forName("UTF-8")), privArgs.get().toHexString());
-                            try {
-                                String psiType = "HFH99_ECC_COMPRESS";
-                                String serverSet = privArgs.get().toHexString();
-                                String clientSet = "";
-                                String[] psiMainArgs = {psiType, serverSet, clientSet};
+                        LOG.info("[PsiPrecompiledContract] CLIENT executing psi - privateArgs: ({}, {})", new String(retrievedKey.get().toArray(), Charset.forName("UTF-8")), privArgs.get().toHexString());
+                        try {
+                            String psiType = "HFH99_ECC_COMPRESS";
+                            String serverSet = "";
+                            String clientSet = privArgs.get().toHexString();
+                            String[] psiMainArgs = {psiType, serverSet, clientSet};
 
-                                Set<ByteBuffer> intersectionSet = PsiMain.main(psiMainArgs);
+                            Set<ByteBuffer> intersectionSet = PsiMain.main(psiMainArgs);
 
-                                String intersection = setToString(intersectionSet);
-                                //LOG.info("[PsiPrecompiledContract] -> SET INTERSECTION: {}", intersection);
-                                result = Bytes.wrap(intersection.getBytes(Charset.forName("UTF-8")));
-                            } catch (Exception e) {
-                                LOG.error("[PsiPrecompiledContract] -> Error: " + e.getMessage(), e);
-                            }
-                            lastPrivateTransaction = privateTransaction;
-                        }else{
-                            LOG.info("[PsiPrecompiledContract] Private transaction has already been computed");
+                            String intersection = setToString(intersectionSet);
+                            //LOG.info("[PsiPrecompiledContract] -> SET INTERSECTION: {}", intersection);
+                            result = Bytes.wrap(intersection.getBytes(Charset.forName("UTF-8")));
+                        } catch (Exception e) {
+                            LOG.error("[PsiPrecompiledContract] -> Error: " + e.getMessage(), e);
                         }
                     } else {
                         LOG.info("[PsiPrecompiledContract] privateArgs from key: {}, NOT PRESENT)", new String(retrievedKey.get().toArray(), Charset.forName("UTF-8")));
