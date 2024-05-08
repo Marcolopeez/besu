@@ -90,10 +90,9 @@ public class RestrictedDefaultPrivacyController extends AbstractRestrictedPrivac
       final Optional<PrivacyGroup> maybePrivacyGroup) {
     PrivateTransaction toSendTransaction;
 
-    if(privateTransaction.hasExtendedPrivacy()){
-      LOG.info("[RestrictedDefaultPrivacyController] hasExtendedPrivacy");
-      // set privateArgs to 0x00
-      toSendTransaction = blindPrivateTransaction(privateTransaction);
+    if(privateTransaction.hasExtendedPrivacy() && privateTransaction.getPrivateArgs().isPresent()){
+        // set privateArgs to 0x00
+        toSendTransaction = blindPrivateTransaction(privateTransaction);
     } else {
       toSendTransaction = privateTransaction;
     }
@@ -104,7 +103,7 @@ public class RestrictedDefaultPrivacyController extends AbstractRestrictedPrivac
 
     String key = sendResponse.getKey();
 
-    if(privateTransaction.hasExtendedPrivacy()) {
+    if(privateTransaction.hasExtendedPrivacy() && !privateTransaction.getExtendedPrivacy().get().toHexString().equals("0x03")) {
       Bytes privateArgs = privateTransaction.getPrivateArgs().get();
       if(privateTransaction.isContractCreation()) {
         privateArgs = extractArguments(privateArgs, true);

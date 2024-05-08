@@ -23,6 +23,11 @@ public class ExtendedPrivacyKeyValueStorage implements ExtendedPrivacyStorage {
     return get(contractAddress);
   }
 
+  @Override
+  public Optional<Bytes> getBetaByContractAddress_Beta(final Bytes contractAddress_Beta) {
+    return get(contractAddress_Beta);
+  }
+
   private Optional<Bytes> get(final Bytes key) {
     return keyValueStorage.get(key.toArray()).map(Bytes::wrap);
   }
@@ -51,6 +56,13 @@ public class ExtendedPrivacyKeyValueStorage implements ExtendedPrivacyStorage {
     public ExtendedPrivacyStorage.Updater putPmtByContractAddress(
             final Bytes contractAddress, final Bytes pmt) {
       set(contractAddress, pmt);
+      return this;
+    }
+
+    @Override
+    public ExtendedPrivacyStorage.Updater putBetaByContractAddress_Beta(
+            final Bytes contractAddress_Beta, final Bytes beta) {
+      set(contractAddress_Beta, beta);
       return this;
     }
 

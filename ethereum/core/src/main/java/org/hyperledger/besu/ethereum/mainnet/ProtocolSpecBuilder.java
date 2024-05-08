@@ -19,6 +19,7 @@ import static org.hyperledger.besu.ethereum.core.PrivacyParameters.DEFAULT_PRIVA
 import static org.hyperledger.besu.ethereum.core.PrivacyParameters.FLEXIBLE_PRIVACY;
 import static org.hyperledger.besu.ethereum.core.PrivacyParameters.PLUGIN_PRIVACY;
 
+import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Wei;
 import org.hyperledger.besu.ethereum.BlockValidator;
 import org.hyperledger.besu.ethereum.GasLimitCalculator;
@@ -338,11 +339,11 @@ public class ProtocolSpecBuilder {
         final PrivacyPrecompiledContract privacyPrecompiledContract =
             (PrivacyPrecompiledContract) precompileContractRegistry.get(DEFAULT_PRIVACY);
         privacyPrecompiledContract.setPrivateTransactionProcessor(privateTransactionProcessor);
-      }
 
-      //PsiPrecompiledContract psiPrecompiledContract =
-      //      (PsiPrecompiledContract) precompileContractRegistry.get(DEFAULT_PRIVACY);
-      // Set private transaction processor
+        final PsiPrecompiledContract psiPrecompiledContract =
+              (PsiPrecompiledContract) precompileContractRegistry.get(Address.PSI);
+        psiPrecompiledContract.setPrivateTransactionProcessor(privateTransactionProcessor);
+      }
       
       blockProcessor =
           new PrivacyBlockProcessor(

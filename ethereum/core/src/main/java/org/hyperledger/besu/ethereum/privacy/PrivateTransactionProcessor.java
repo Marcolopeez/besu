@@ -87,8 +87,6 @@ public class PrivateTransactionProcessor {
 
   public Bytes processExtendedTransaction(final Bytes input, final PrivateTransaction transaction, final MessageFrame messageFrame){
     try {
-      LOG.info(" >>> [PrivateTransactionProcessor] Transaction hasExtendedPrivacy");
-
       /* TODO: declare precompiled addresses
       Map<Bytes, String> precompiledMap = Map.of(
               Bytes.fromHexString("0x01"), "", //HFH99_ECC_COMPRESS_address

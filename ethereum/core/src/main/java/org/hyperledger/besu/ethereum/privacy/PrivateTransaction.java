@@ -685,7 +685,7 @@ public class PrivateTransaction implements org.hyperledger.besu.plugin.data.Priv
       sb.append("privacyGroupId=").append(getPrivacyGroupId().get()).append(", ");
     sb.append("restriction=").append(getRestriction()).append(", ");
     sb.append("extendedPrivacy=").append(getExtendedPrivacy()).append(", ");
-    sb.append("privateArgs=").append(getPrivateArgs().get());
+    if (getPrivateArgs().isPresent()) sb.append("privateArgs=").append(getPrivateArgs().get());
     return sb.append("}").toString();
   }
 

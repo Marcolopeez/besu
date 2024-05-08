@@ -26,6 +26,7 @@ import org.hyperledger.besu.ethereum.core.MutableWorldState;
 import org.hyperledger.besu.ethereum.core.PrivacyParameters;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSchedule;
 import org.hyperledger.besu.ethereum.mainnet.ProtocolSpec;
+import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.PsiPrecompiledContract;
 import org.hyperledger.besu.ethereum.processing.TransactionProcessingResult;
 import org.hyperledger.besu.ethereum.transaction.CallParameter;
 import org.hyperledger.besu.ethereum.vm.BlockHashLookup;
@@ -41,6 +42,9 @@ import com.google.common.base.Suppliers;
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.Bytes32;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /*
  * Used to process transactions for priv_call.
  *
@@ -49,6 +53,7 @@ import org.apache.tuweni.bytes.Bytes32;
  */
 public class PrivateTransactionSimulator {
 
+  private static final Logger LOG = LoggerFactory.getLogger(PrivateTransactionSimulator.class);
   private static final Supplier<SignatureAlgorithm> SIGNATURE_ALGORITHM =
       Suppliers.memoize(SignatureAlgorithmFactory::getInstance);
 
@@ -124,7 +129,8 @@ public class PrivateTransactionSimulator {
 
     final PrivateTransaction transaction =
         getPrivateTransaction(callParams, header, privacyGroupId, disposablePrivateState);
-
+    LOG.info("transaction payload: {}", transaction.getPayload());
+    LOG.info("string transaction payload: {}", transaction.getPayload().toBase64String());
     final ProtocolSpec protocolSpec = protocolSchedule.getByBlockNumber(header.getNumber());
 
     final PrivateTransactionProcessor privateTransactionProcessor =
