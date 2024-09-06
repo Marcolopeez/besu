@@ -236,6 +236,7 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
         }else if(extendedPrivacy.equals("0x02")) {
           if (privateTransaction.isContractCreation() && privArgs.isPresent()) {
             // Load && Client
+            LOG.info("[PrivacyPrecompiledContract] PrivateArgs: {}", privArgs);
             final Bytes result = privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
             List<String> results = Splitter.on('|').splitToList(new String(result.toArray(), Charset.forName("UTF-8")));
 
@@ -243,7 +244,7 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
               Path filePath = Paths.get("hyBeta.txt");
               BufferedWriter writer = Files.newBufferedWriter(filePath, StandardCharsets.UTF_8);
 
-              writer.write("hyBeta: " + results.get(1));
+              writer.write(results.get(1));
               writer.newLine(); // Nueva línea
 
               // Cerrar el BufferedWriter
@@ -262,21 +263,22 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
             newUpdater.putPmtByContractAddress(privateContractAddress, Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))));
             newUpdater.commit();
           } else if (privArgs.isPresent()) {
-            // Consume && sever
+            // Server
+            LOG.info("[PrivacyPrecompiledContract] PrivateArgs: {}", privArgs);
             final Bytes result = privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
             List<String> results = Splitter.on('|').splitToList(new String(result.toArray(), Charset.forName("UTF-8")));
 
             try {
               Path alphaFilePath = Paths.get("alpha.txt");
               BufferedWriter alphaWriter = Files.newBufferedWriter(alphaFilePath, StandardCharsets.UTF_8);
-              alphaWriter.write("alpha: " + results.get(0));
+              alphaWriter.write(results.get(0).toString());
               alphaWriter.newLine(); // Nueva línea
               alphaWriter.close();
 
 
               Path peqtFilePath = Paths.get("peqt.txt");
               BufferedWriter peqtWriter = Files.newBufferedWriter(peqtFilePath, StandardCharsets.UTF_8);
-              peqtWriter.write("peqt: " + results.get(1));
+              peqtWriter.write(results.get(1));
               peqtWriter.newLine(); // Nueva línea
               peqtWriter.close();
             } catch (IOException e) {
