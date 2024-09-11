@@ -1,8 +1,9 @@
 package org.hyperledger.besu.psi;
 
-
-import edu.alibaba.mpc4j.common.rpc.impl.netty.NettyParty;
-import edu.alibaba.mpc4j.common.rpc.impl.netty.NettyRpc;
+import edu.alibaba.mpc4j.common.rpc.MpcAbortException;
+import edu.alibaba.mpc4j.common.rpc.impl.memory.MemoryRpcManager;
+import edu.alibaba.mpc4j.common.rpc.Rpc;
+import edu.alibaba.mpc4j.common.rpc.RpcManager;
 import edu.alibaba.mpc4j.common.tool.hashbin.object.cuckoo.CuckooHashBinFactory.CuckooHashBinType;
 import edu.alibaba.mpc4j.s2pc.pso.psi.PsiConfig;
 import edu.alibaba.mpc4j.s2pc.pso.psi.PsiServer;
@@ -10,23 +11,25 @@ import edu.alibaba.mpc4j.s2pc.pso.psi.PsiClient;
 import edu.alibaba.mpc4j.s2pc.pso.psi.PsiFactory;
 import edu.alibaba.mpc4j.s2pc.pso.psi.hfh99.Hfh99EccPsiConfig;
 import edu.alibaba.mpc4j.s2pc.pso.psi.kkrt16.Kkrt16PsiConfig;
-import org.apache.commons.lang3.time.StopWatch;
 import org.apache.log4j.PropertyConfigurator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.math.BigInteger;
 import java.nio.ByteBuffer;
-import java.util.concurrent.TimeUnit;
+import java.util.ArrayList;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Properties;
 import java.util.Set;
+
+import com.google.common.base.Splitter;
 
 
 public class PsiMain {
     private static final Logger LOGGER = LoggerFactory.getLogger(PsiMain.class);
 
-    public static Set<ByteBuffer> main(final String[] args) throws Exception {
-        LOGGER.info("read log config");
+    public static String[] main(final String[] args) throws Exception {
         Properties log4jProperties = new Properties();
         log4jProperties.load(PsiMain.class.getResourceAsStream("/log4j.properties"));
         PropertyConfigurator.configure(log4jProperties);
@@ -34,24 +37,81 @@ public class PsiMain {
         // Set VM options to link to the native libraries
         setVMOptions();
 
-        ResultHolder resultHolder = new ResultHolder();
         PsiConfig config = buildPsiType(args[0]);
-        Set<NettyParty> nettyPartySet = new HashSet<>(2);
-        NettyParty clientParty;
-        NettyParty serverParty;
 
-        clientParty = new NettyParty(0, "P_1", "0.0.0.0", 23812);
-        serverParty = new NettyParty(1, "P_2", "0.0.0.0", 23813);
-        nettyPartySet.add(clientParty);
-        nettyPartySet.add(serverParty);
+        RpcManager rpcManager = new MemoryRpcManager(2);
+        Rpc serverRpc = rpcManager.getRpc(0);
+        Rpc clientRpc = rpcManager.getRpc(1);
+        PsiServer<ByteBuffer> server = PsiFactory.createServer(serverRpc, clientRpc.ownParty(), config);
+        PsiClient<ByteBuffer> client = PsiFactory.createClient(clientRpc, serverRpc.ownParty(), config);
+
+        server.setTaskId(5);
+        client.setTaskId(5);
+
+        // args[0] -> PsiType (HFH99_ECC_COMPRESS)
+        // args[1] -> ServerSet (Bob)
+        // args[2] -> ClientSet (Alice)
+        // args[3] -> hyBeta
+        // args[4] -> hxAlpha
+        // args[5] -> peqt
+        // args[6] -> Beta
+        // args[7] -> ServerSetLength (Bob)
+        // args[8] -> ClientSetLength (Alice)
 
         if(args[1].isEmpty()){
             byte[] bytesClientSet = hexStringToByteArray(args[2].substring(2)); // (PrivateArgs without '0x')
-            return executeClient(clientParty, serverParty, nettyPartySet, config, resultHolder, bytesClientSet);
+            if(args[4].isEmpty()){
+                return executeClient1(client, bytesClientSet, Integer.parseInt(args[7]));
+            }else{
+                return executeClient2(client, bytesClientSet, args[4], args[5], args[6], Integer.parseInt(args[7]));
+            }
         }else{
             byte[] bytesServerSet = hexStringToByteArray(args[1].substring(2)); // (PrivateArgs without '0x')
-            return executeServer(clientParty, serverParty, nettyPartySet, config, bytesServerSet);
+            return executeServer(server, bytesServerSet, args[3], Integer.parseInt(args[8]));
         }
+    }
+
+    private static String[] executeClient1(final PsiClient<ByteBuffer> client, final byte[] bytesClientSet, final int serverSetSize){
+        Set<ByteBuffer> clientSet = convertByteArrayToByteBufferSet(bytesClientSet);
+        BigInteger beta = client.psi_1(clientSet.size(), serverSetSize, clientSet, serverSetSize);
+        List<byte[]> hyBetaPayload = client.psi_2(serverSetSize, clientSet.size());
+
+        String betaString = beta.toString();
+        String hyBetaHexString = bytesListToHexString(hyBetaPayload);
+
+        return new String[] {betaString, hyBetaHexString};
+    }
+
+
+    private static String[] executeClient2(final PsiClient<ByteBuffer> client, final byte[] bytesClientSet, final String hxAlphaHexString, final String peqtHexString, final String betaString, final int serverSetSize) {
+        Set<ByteBuffer> clientSet = convertByteArrayToByteBufferSet(bytesClientSet);
+        List<List<byte[]>> reconstructedResult = new ArrayList<>();
+        reconstructedResult.add(hexStringToBytesList(hxAlphaHexString));
+        reconstructedResult.add(hexStringToBytesList(peqtHexString));
+
+        try {
+            Set<ByteBuffer> intersectionSet = client.psi_3(clientSet.size(), serverSetSize, clientSet, serverSetSize, new BigInteger(betaString), reconstructedResult);
+            String intersectionSetString = setToString(intersectionSet);
+            return new String[] {intersectionSetString};
+        } catch (MpcAbortException e) {
+            LOGGER.error("Ocurrió un error: " + e.getMessage(), e);
+            return new String[0];
+        }
+    }
+
+    private static String[] executeServer(final PsiServer<ByteBuffer> server, final byte[] bytesServerSet, final String hyBetaHexString, final int clientSetSize) {
+        Set<ByteBuffer> serverSet = convertByteArrayToByteBufferSet(bytesServerSet);
+        List<byte[]> reconstructedBeta = hexStringToBytesList(hyBetaHexString);
+
+        try {
+            List<byte[]>[] result = server.psi_1(serverSet.size(), clientSetSize, serverSet, clientSetSize, reconstructedBeta);
+            String hxAlphaHexString = bytesListToHexString(result[0]);
+            String peqtHexString = bytesListToHexString(result[1]);
+            return new String[] {hxAlphaHexString, peqtHexString};
+        } catch (MpcAbortException e) {
+            LOGGER.error("Ocurrió un error: " + e.getMessage(), e);
+        }
+        return new String[0];
     }
 
     private static void setVMOptions() {
@@ -109,70 +169,50 @@ public class PsiMain {
         return data;
     }
 
-    private static Set<ByteBuffer> executeClient(final NettyParty clientParty, final NettyParty serverParty, final Set<NettyParty> nettyPartySet, final PsiConfig config, final ResultHolder resultHolder, final byte[] bytesClientSet) {
-        LOGGER.info("[PsiMain] -> Create rpc for client ");
-        NettyRpc clientRpc = new NettyRpc(clientParty, nettyPartySet);
-        PsiClient<ByteBuffer> client = PsiFactory.createClient(clientRpc, serverParty, config);
-        client.setTaskId(5);
-        Set<ByteBuffer> clientSet = convertByteArrayToByteBufferSet(bytesClientSet);
-
-        try {
-            PsiClientThread clientThread = new PsiClientThread(client, clientSet, clientSet.size(), resultHolder);
-            StopWatch stopWatch = new StopWatch();
-
-            stopWatch.start();
-            clientThread.start();
-
-            clientThread.join();
-            stopWatch.stop();
-            long time = stopWatch.getTime(TimeUnit.MILLISECONDS);
-
-            LOGGER.info("Client data_packet_num = {}, payload_bytes = {}B, send_bytes = {}B, time = {}ms",
-                    clientRpc.getSendDataPacketNum(), clientRpc.getPayloadByteLength(), clientRpc.getSendByteLength(),
-                    time
-            );
-
-            clientRpc.reset();
-            return resultHolder.getIntersectionSet();
-        } catch (InterruptedException e) {
-            LOGGER.error("Ocurrió un error: " + e.getMessage(), e);
-            return new HashSet<>();
+    public static String bytesListToHexString(final List<byte[]> byteArrayList) {
+        String elementDelimiter = ":";
+        StringBuilder hexString = new StringBuilder();
+        for (int i = 0; i < byteArrayList.size(); i++) {
+            byte[] byteArray = byteArrayList.get(i);
+            for (byte b : byteArray) {
+                hexString.append(String.format("%02X", b));
+            }
+            if (i < byteArrayList.size() - 1) {
+                hexString.append(elementDelimiter); // Agregar delimitador entre elementos
+            }
         }
+        return hexString.toString();
     }
 
-    private static Set<ByteBuffer> executeServer(final NettyParty clientParty, final NettyParty serverParty, final Set<NettyParty> nettyPartySet, final PsiConfig config, final byte[] bytesServerSet) {
-        LOGGER.info("[PsiMain] -> Create rpc for Server ");
-        NettyRpc serverRpc = new NettyRpc(serverParty, nettyPartySet);
-        PsiServer<ByteBuffer> server = PsiFactory.createServer(serverRpc, clientParty, config);
-        server.setTaskId(5);
-        Set<ByteBuffer> serverSet = convertByteArrayToByteBufferSet(bytesServerSet);
+    public static List<byte[]> hexStringToBytesList(final String hexString) {
+        String elementDelimiter = ":";
+        List<byte[]> byteArrayList = new ArrayList<>();
 
-        try {
-            LOGGER.info("-----test {}，server_size = {}，client_size = {}-----",
-                    server.getPtoDesc().getPtoName(), serverSet.size(), serverSet.size() // <- TODO: No siempre tendrán el mismo tamaño
-            );
-
-            PsiServerThread serverThread = new PsiServerThread(server, serverSet, serverSet.size());
-            StopWatch stopWatch = new StopWatch();
-
-            stopWatch.start();
-            serverThread.start();
-
-            serverThread.join();
-            stopWatch.stop();
-            long time = stopWatch.getTime(TimeUnit.MILLISECONDS);
-
-            LOGGER.info("Server data_packet_num = {}, payload_bytes = {}B, send_bytes = {}B, time = {}ms",
-                    serverRpc.getSendDataPacketNum(), serverRpc.getPayloadByteLength(), serverRpc.getSendByteLength(),
-                    time
-            );
-
-            serverRpc.reset();
-            return new HashSet<>();
-        } catch (InterruptedException e) {
-            LOGGER.error("Ocurrió un error: " + e.getMessage(), e);
-            return new HashSet<>();
+        Iterable<String> elements = Splitter.onPattern(elementDelimiter).split(hexString);
+        for (String element : elements) {
+            byte[] byteArray = new byte[element.length() / 2];
+            for (int i = 0; i < element.length(); i += 2) {
+                String hexByte = element.substring(i, i + 2);
+                byteArray[i / 2] = (byte) Integer.parseInt(hexByte, 16);
+            }
+            byteArrayList.add(byteArray);
         }
+
+        return byteArrayList;
+    }
+
+    private static String setToString(final Set<ByteBuffer> set) {
+        StringBuilder hexString = new StringBuilder("0x");
+        for (ByteBuffer byteBuffer : set) {
+            byte[] bytes = new byte[byteBuffer.limit()];
+            byteBuffer.rewind();
+            byteBuffer.get(bytes);
+            for (byte b : bytes) {
+                hexString.append(String.format("%02X", b));
+            }
+        }
+        return hexString.toString().trim();
     }
 
 }
+

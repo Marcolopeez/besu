@@ -85,40 +85,13 @@ public class PrivateTransactionProcessor {
     this.privateTransactionValidator = privateTransactionValidator;
   }
 
-  public Bytes processExtendedTransaction(final Bytes input, final PrivateTransaction transaction, final MessageFrame messageFrame){
+  public void processExtendedTransaction(final Bytes input, final PrivateTransaction transaction, final MessageFrame messageFrame){
     try {
-      /* TODO: declare precompiled addresses
-      Map<Bytes, String> precompiledMap = Map.of(
-              Bytes.fromHexString("0x01"), "", //HFH99_ECC_COMPRESS_address
-              Bytes.fromHexString("0x02"), "", //HFH99_ECC_UNCOMPRESS_address
-              Bytes.fromHexString("0x03"), "", //KKRT16_address
-              Bytes.fromHexString("0x04"), "", //KKRT16_NAIVE_NO_STASH_address
-              Bytes.fromHexString("0x05"), ""  //KKRT16_NAIVE_4_HASH_address
-      );
-
-      // TODO: modify the getExtendedPrivacy in order to suit this implementation
-
-      // Get type of extendedPrivacy
-      Bytes extendedPrivacy = transaction.getExtendedPrivacy().get();
-
-      // Get precompileAddress from extendedPrivacy
-      String precompiledAddress = precompiledMap.get(extendedPrivacy);*/
       String precompiledAddress = "0x20"; //PsiPrecompiledContract Address
-
-      if (precompiledAddress != null) {
-        final AbstractMessageProcessor extendedPrivacyExecutor = messageCallProcessor;
-        final Bytes result = extendedPrivacyExecutor.executeExtendedPrivacyPrecompiled(precompiledAddress, input, messageFrame);
-        if (result != null) {
-          return result;
-        }else{
-          return Bytes.EMPTY;
-        }
-      }else{
-        return Bytes.EMPTY;
-      }
+      final AbstractMessageProcessor extendedPrivacyExecutor = messageCallProcessor;
+      extendedPrivacyExecutor.executeExtendedPrivacyPrecompiled(precompiledAddress, input, messageFrame);
     } catch (final RuntimeException re) {
       LOG.error("Critical Exception Processing Transaction", re);
-      return Bytes.EMPTY;
     }
   }
 

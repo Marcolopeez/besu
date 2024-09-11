@@ -161,7 +161,6 @@ public class ContractCreationProcessor extends AbstractMessageProcessor {
     }
   }
   @Override
-  public Bytes executeExtendedPrivacyPrecompiled(final String precompiledAddress, final Bytes input, final MessageFrame messageFrame){
-    return Bytes.EMPTY;
+  public void executeExtendedPrivacyPrecompiled(final String precompiledAddress, final Bytes input, final MessageFrame messageFrame){
   }
 }

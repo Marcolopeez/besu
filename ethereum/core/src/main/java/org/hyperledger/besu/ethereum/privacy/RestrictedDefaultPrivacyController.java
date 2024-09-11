@@ -14,6 +14,7 @@
  */
 package org.hyperledger.besu.ethereum.privacy;
 
+import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.enclave.Enclave;
 import org.hyperledger.besu.enclave.types.PrivacyGroup;
 import org.hyperledger.besu.enclave.types.SendResponse;
@@ -88,62 +89,90 @@ public class RestrictedDefaultPrivacyController extends AbstractRestrictedPrivac
       final PrivateTransaction privateTransaction,
       final String privacyUserId,
       final Optional<PrivacyGroup> maybePrivacyGroup) {
-    PrivateTransaction toSendTransaction;
+    if(privateTransaction.hasExtendedPrivacy() && privateTransaction.isContractCreation()){
+      putAliceAddressInExtendedStorage(Address.privateContractAddress(privateTransaction.getSender(), privateTransaction.getNonce(), privateTransaction.determinePrivacyGroupId()), privateTransaction.getSender());
+    }
 
+    PrivateTransaction toSendTransaction;
     if(privateTransaction.hasExtendedPrivacy() && privateTransaction.getPrivateArgs().isPresent()){
         // set privateArgs to 0x00
         toSendTransaction = blindPrivateTransaction(privateTransaction);
+
+        if(isExtendedPrivacy(privateTransaction, "0x02")) {
+          Bytes privateSet = extractPrivateSetFromPrivateArgs(privateTransaction);
+
+          final Bytes privateContractAddress = privateTransaction.getTo().get();
+          Optional<Bytes> existingPrivateSet = getPrivateSetFromExtendedStorage(privateContractAddress);
+          Bytes newPrivateSet;
+          if(existingPrivateSet.isPresent()){
+            newPrivateSet = Bytes.concatenate(existingPrivateSet.get(), privateSet);
+          }else{
+            newPrivateSet = privateSet;
+          }
+          putPrivateSetInExtendedStorage(privateContractAddress, newPrivateSet);
+        }
     } else {
       toSendTransaction = privateTransaction;
     }
 
     LOG.trace("Storing private transaction in enclave");
     final SendResponse sendResponse =
-        sendRequest(toSendTransaction, privacyUserId, maybePrivacyGroup);
-
-    String key = sendResponse.getKey();
-
-    if(privateTransaction.hasExtendedPrivacy() && !privateTransaction.getExtendedPrivacy().get().toHexString().equals("0x03")) {
-      Bytes privateArgs = privateTransaction.getPrivateArgs().get();
-      if(privateTransaction.isContractCreation()) {
-        privateArgs = extractArguments(privateArgs, true);
-      } else {
-        privateArgs = extractArguments(privateArgs, false);
-      }
-      LOG.info("[RestrictedDefaultPrivacyController] Saving into privateStorage ({}, {})", key, privateArgs);
-      ExtendedPrivacyStorage.Updater updater = extendedPrivacyStorage.updater();
-      updater.putPrivateArgsByPmt(Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))), privateArgs);
-      updater.commit();
-    }
-
-    return key;
+            sendRequest(toSendTransaction, privacyUserId, maybePrivacyGroup);
+    return sendResponse.getKey();
   }
 
-  private Bytes extractArguments(final Bytes privateArgs, final boolean isContractCreation) {
-    int referenceLength = 64;
-    List<String> listPrivateArgs = new ArrayList<>();
-    String strPrivateArgs = privateArgs.toHexString().substring(2, privateArgs.toHexString().length());
-    int items = strPrivateArgs.length() / referenceLength;
-    for(int i = 0; i < items; i++) {
-      listPrivateArgs.add(strPrivateArgs.substring(i * referenceLength, (i + 1) * referenceLength));
+  private void putAliceAddressInExtendedStorage(final Address privateContractAddress, final Address AliceAddress) {
+    final ExtendedPrivacyStorage.Updater updater = extendedPrivacyStorage.updater();
+    updater.putAliceAddressByContractAddress_Alice(
+            Bytes.concatenate(privateContractAddress, Bytes.wrap("_Alice".getBytes(Charset.forName("UTF-8")))),
+            AliceAddress);
+    updater.commit();
+  }
+
+  private Optional<Bytes> getPrivateSetFromExtendedStorage(final Bytes privateContractAddress) {
+    return extendedPrivacyStorage.getPrivateSetByContractAddress(privateContractAddress);
+  }
+
+  private void putPrivateSetInExtendedStorage(final Bytes privateContractAddress, final Bytes newPrivateSet) {
+    LOG.info("Saving into extendedStorage: ({})", newPrivateSet);
+    ExtendedPrivacyStorage.Updater updater = extendedPrivacyStorage.updater();
+    updater.putPrivateSetByContractAddress(privateContractAddress, newPrivateSet);
+    updater.commit();
+  }
+
+  private boolean isExtendedPrivacy(final PrivateTransaction privateTransaction, final String extendedPrivacyType) {
+    return privateTransaction.getExtendedPrivacy().get().toHexString().equals(extendedPrivacyType);
+  }
+
+  private Bytes extractPrivateSetFromPrivateArgs(final PrivateTransaction privateTransaction) {
+    Bytes privateArgs = privateTransaction.getPrivateArgs().get();
+    final int REFERENCE_LENGTH = 64;
+
+    // Convert the Bytes to a hex string without the "0x" prefix
+    String hexString = privateArgs.toHexString().substring(2);
+
+    // Split the hex string into chunks of REFERENCE_LENGTH
+    List<String> chunks = splitHexString(hexString, REFERENCE_LENGTH);
+
+    // Extract the length of the private set from the second chunk
+    int privateSetLength = Integer.parseInt(chunks.get(1));
+
+    // Extract the result list from the subsequent chunks
+    List<String> privateSetChunks = chunks.subList(2, 2 + privateSetLength);
+
+    // Concatenate the result chunks with "0x" prefix
+    String privateSetHexString = "0x" + String.join("", privateSetChunks);
+
+    return Bytes.fromHexString(privateSetHexString);
+  }
+
+  // Helper method to split a hex string into chunks of a specified length
+  private List<String> splitHexString(final String hexString, final int chunkLength) {
+    List<String> chunks = new ArrayList<>();
+    for (int i = 0; i < hexString.length(); i += chunkLength) {
+      chunks.add(hexString.substring(i, Math.min(i + chunkLength, hexString.length())));
     }
-    List<String> resultList = new ArrayList<>();
-    if(isContractCreation) {
-      int length = Integer.parseInt(listPrivateArgs.get(4));
-      for(int j = 5; j < 5 + length; j++) {
-        resultList.add(listPrivateArgs.get(j));
-      }
-    } else {
-      int length = Integer.parseInt(listPrivateArgs.get(1));
-      for(int j = 2; j < 2 + length; j++) {
-        resultList.add(listPrivateArgs.get(j));
-      }
-    }
-    String res = "0x";
-    for(String x : resultList) {
-      res = res + x;
-    }
-    return Bytes.fromHexString(res);
+    return chunks;
   }
 
   private PrivateTransaction blindPrivateTransaction(final PrivateTransaction privateTransaction) {

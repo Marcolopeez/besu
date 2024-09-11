@@ -37,7 +37,6 @@ import org.hyperledger.besu.ethereum.privacy.PrivateStateRootResolver;
 import org.hyperledger.besu.ethereum.privacy.PrivateTransaction;
 import org.hyperledger.besu.ethereum.privacy.PrivateTransactionProcessor;
 import org.hyperledger.besu.ethereum.privacy.PrivateTransactionReceipt;
-import org.hyperledger.besu.ethereum.privacy.storage.ExtendedPrivacyStorage;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivateMetadataUpdater;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivateTransactionMetadata;
 import org.hyperledger.besu.ethereum.processing.TransactionProcessingResult;
@@ -54,18 +53,12 @@ import org.hyperledger.besu.evm.tracing.OperationTracer;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
 import org.hyperledger.besu.plugin.data.Hash;
 
+import java.util.Base64;
+import java.util.Optional;
+import java.io.IOException;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
-import java.util.Base64;
-import java.util.List;
-import java.util.Optional;
-import java.io.BufferedWriter;
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 
-import com.google.common.base.Splitter;
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.Bytes32;
 import org.slf4j.Logger;
@@ -78,7 +71,6 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
   private final PrivateStateGenesisAllocator privateStateGenesisAllocator;
   PrivateTransactionProcessor privateTransactionProcessor;
 
-  private final ExtendedPrivacyStorage extendedPrivacyStorage;
   private PrivateTransaction lastPrivateTransaction;
 
   private static final Logger LOG = LoggerFactory.getLogger(PrivacyPrecompiledContract.class);
@@ -93,8 +85,7 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
         privacyParameters.getPrivateWorldStateArchive(),
         privacyParameters.getPrivateStateRootResolver(),
         privacyParameters.getPrivateStateGenesisAllocator(),
-        name,
-        privacyParameters.getExtendedPrivacyStorage());
+        name);
   }
 
   protected PrivacyPrecompiledContract(
@@ -109,24 +100,7 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
     this.privateWorldStateArchive = worldStateArchive;
     this.privateStateRootResolver = privateStateRootResolver;
     this.privateStateGenesisAllocator = privateStateGenesisAllocator;
-    this.extendedPrivacyStorage = null;
     lastPrivateTransaction = new PrivateTransaction.Builder().build();
-  }
-
-  protected PrivacyPrecompiledContract(
-          final GasCalculator gasCalculator,
-          final Enclave enclave,
-          final WorldStateArchive worldStateArchive,
-          final PrivateStateRootResolver privateStateRootResolver,
-          final PrivateStateGenesisAllocator privateStateGenesisAllocator,
-          final String name,
-          final ExtendedPrivacyStorage extendedPrivacyStorage) {
-    super(name, gasCalculator);
-    this.enclave = enclave;
-    this.privateWorldStateArchive = worldStateArchive;
-    this.privateStateRootResolver = privateStateRootResolver;
-    this.privateStateGenesisAllocator = privateStateGenesisAllocator;
-    this.extendedPrivacyStorage = extendedPrivacyStorage;
   }
 
   public void setPrivateTransactionProcessor(
@@ -208,103 +182,9 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
         privacyGroupId,
         messageFrame.getBlockValues().getNumber());
 
-    if (privateTransaction.hasExtendedPrivacy()) {
-      if(!privateTransaction.equals(lastPrivateTransaction)){
+    if (privateTransaction.hasExtendedPrivacy() && privateTransaction.getExtendedPrivacy().get().toHexString().equals("0x03") && !privateTransaction.equals(lastPrivateTransaction)) {
         lastPrivateTransaction = privateTransaction;
-        String extendedPrivacy = privateTransaction.getExtendedPrivacy().get().toHexString();
-        LOG.info("[PrivacyPrecompileContract] Transaction hasExtendedPrivacy: {}", extendedPrivacy);
-        Optional<Bytes> privArgs = extendedPrivacyStorage.getPrivateArgsByPmt(Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))));
-
-        if(extendedPrivacy.equals("0x01")){
-          if (privateTransaction.isContractCreation() && privArgs.isPresent()) {
-            // Client deploying contract
-            final Address privateContractAddress = getPrivateContractAddress(privateTransaction.getSender(), privateWorldStateUpdater, privacyGroupId);
-            ExtendedPrivacyStorage.Updater updater = extendedPrivacyStorage.updater();
-            updater.putPmtByContractAddress(privateContractAddress, Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))));
-            updater.commit();
-            //LOG.info("[PrivacyPrecompiledContract] Contract-Key: ({}, {})", privateContractAddress.toString(), key);
-          } else if (!privateTransaction.isContractCreation()) {
-            if (privArgs.isPresent()) {
-              // Server
-              privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
-            } else {
-              // Client
-              final Bytes result = privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
-              LOG.info("[PrivacyPrecompiledContract] Intersection: {}", new String(result.toArray(), Charset.forName("UTF-8")));
-            }
-          }
-        }else if(extendedPrivacy.equals("0x02")) {
-          if (privateTransaction.isContractCreation() && privArgs.isPresent()) {
-            // Load && Client
-            LOG.info("[PrivacyPrecompiledContract] PrivateArgs: {}", privArgs);
-            final Bytes result = privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
-            List<String> results = Splitter.on('|').splitToList(new String(result.toArray(), Charset.forName("UTF-8")));
-
-            try {
-              Path filePath = Paths.get("hyBeta.txt");
-              BufferedWriter writer = Files.newBufferedWriter(filePath, StandardCharsets.UTF_8);
-
-              writer.write(results.get(1));
-              writer.newLine(); // Nueva línea
-
-              // Cerrar el BufferedWriter
-              writer.close();
-            } catch (IOException e) {
-              LOG.info("[PrivacyPrecompiledContract] Error al escribir en el archivo: {}", e.getMessage());
-              e.printStackTrace();
-            }
-
-            final Address privateContractAddress = getPrivateContractAddress(privateTransaction.getSender(), privateWorldStateUpdater, privacyGroupId);
-            ExtendedPrivacyStorage.Updater updater = extendedPrivacyStorage.updater();
-            updater.putBetaByContractAddress_Beta(Bytes.concatenate(privateContractAddress, Bytes.wrap("_Beta".getBytes(Charset.forName("UTF-8")))), Bytes.wrap(results.get(0).getBytes(Charset.forName("UTF-8"))));
-            updater.commit();
-
-            ExtendedPrivacyStorage.Updater newUpdater = extendedPrivacyStorage.updater();
-            newUpdater.putPmtByContractAddress(privateContractAddress, Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))));
-            newUpdater.commit();
-          } else if (privArgs.isPresent()) {
-            // Server
-            LOG.info("[PrivacyPrecompiledContract] PrivateArgs: {}", privArgs);
-            final Bytes result = privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
-            List<String> results = Splitter.on('|').splitToList(new String(result.toArray(), Charset.forName("UTF-8")));
-
-            try {
-              Path alphaFilePath = Paths.get("alpha.txt");
-              BufferedWriter alphaWriter = Files.newBufferedWriter(alphaFilePath, StandardCharsets.UTF_8);
-              alphaWriter.write(results.get(0).toString());
-              alphaWriter.newLine(); // Nueva línea
-              alphaWriter.close();
-
-
-              Path peqtFilePath = Paths.get("peqt.txt");
-              BufferedWriter peqtWriter = Files.newBufferedWriter(peqtFilePath, StandardCharsets.UTF_8);
-              peqtWriter.write(results.get(1));
-              peqtWriter.newLine(); // Nueva línea
-              peqtWriter.close();
-            } catch (IOException e) {
-              LOG.info("[PrivacyPrecompiledContract] Error al escribir en el archivo: {}", e.getMessage());
-              e.printStackTrace();
-            }
-          }else {
-            LOG.info("[PrivacyPrecompiledContract] Private args are not present");
-          }
-        }else if(extendedPrivacy.equals("0x03")){
-          final Address privateContractAddress = privateTransaction.getTo().get();
-
-          Optional<Bytes> beta = extendedPrivacyStorage.getBetaByContractAddress_Beta(Bytes.concatenate(privateContractAddress, Bytes.wrap("_Beta".getBytes(Charset.forName("UTF-8")))));
-          if (beta.isPresent()) {
-            final Bytes result = privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
-            LOG.info("[PrivacyPrecompiledContract] Result: {}", new String(result.toArray(), Charset.forName("UTF-8")));
-          }else{
-            LOG.info("[PrivacyPrecompiledContract] Beta is not present");
-          }
-
-        }else{
-          LOG.info("[PrivacyPrecompiledContract] Unrecognised Private Transaction Extension");
-        }
-      }else{
-        LOG.info("[PrivacyPrecompiledContract] Extended Private transaction has already been computed");
-      }
+        privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
     }
 
     final TransactionProcessingResult result =
@@ -331,29 +211,6 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
     }
 
     return result.getOutput();
-  }
-
-  Address getPrivateContractAddress(final Address senderAddress,
-                                    final WorldUpdater privateWorldStateUpdater,
-                                    final Bytes32 privacyGroupId) {
-    final EvmAccount maybePrivateSender = privateWorldStateUpdater.getAccount(senderAddress);
-    final MutableAccount sender =
-            maybePrivateSender != null
-                    ? maybePrivateSender.getMutable()
-                    : privateWorldStateUpdater.createAccount(senderAddress, 0, Wei.ZERO).getMutable();
-    final long nonce = sender.getNonce();
-
-    final Address privateContractAddress =
-            Address.privateContractAddress(senderAddress, nonce, privacyGroupId);
-
-    LOG.info(
-            "[PrivacyPrecompileContract] Calculated contract address {} from sender {} with nonce {} and privacy group {}",
-            privateContractAddress.toString(),
-            senderAddress,
-            nonce,
-            privacyGroupId.toString());
-
-    return privateContractAddress;
   }
 
   protected void maybeApplyGenesisToPrivateWorldState(

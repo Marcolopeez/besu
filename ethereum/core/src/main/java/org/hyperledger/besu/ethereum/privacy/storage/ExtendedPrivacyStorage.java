@@ -5,22 +5,22 @@ import java.util.Optional;
 import org.apache.tuweni.bytes.Bytes;
 
 public interface ExtendedPrivacyStorage {
-  Optional<Bytes> getPrivateArgsByPmt(Bytes pmt);
-  Optional<Bytes> getPmtByContractAddress(Bytes contractAddress);
+  Optional<Bytes> getPrivateSetByContractAddress(Bytes contractAddress);
   Optional<Bytes> getBetaByContractAddress_Beta(Bytes contractAddress_Beta);
+  Optional<Bytes> getAliceAddressByContractAddress_Alice(Bytes contractAddress_Alice);
 
   Updater updater();
 
   interface Updater {
 
-    Updater putPrivateArgsByPmt(
-            Bytes pmt, Bytes privateArgs);
-
-    Updater putPmtByContractAddress(
-            Bytes contractAddress, Bytes pmt);
+    Updater putPrivateSetByContractAddress(
+            Bytes contractAddress, Bytes privateArgs);
 
     Updater putBetaByContractAddress_Beta(
             Bytes contractAddress_Beta, Bytes beta);
+
+    Updater putAliceAddressByContractAddress_Alice(
+            Bytes contractAddress_Alice, Bytes aliceAddress);
 
     void commit();
 

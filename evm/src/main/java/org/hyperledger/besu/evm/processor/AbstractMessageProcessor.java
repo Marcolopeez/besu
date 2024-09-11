@@ -84,7 +84,7 @@ public abstract class AbstractMessageProcessor {
    */
   protected abstract void codeSuccess(MessageFrame frame, final OperationTracer operationTracer);
 
-  public abstract Bytes executeExtendedPrivacyPrecompiled(final String precompiledAddress, final Bytes input, final MessageFrame messageFrame);
+  public abstract void executeExtendedPrivacyPrecompiled(final String precompiledAddress, final Bytes input, final MessageFrame messageFrame);
 
   private void clearAccumulatedStateBesidesGasAndOutput(final MessageFrame frame) {
     ArrayList<Address> addresses =

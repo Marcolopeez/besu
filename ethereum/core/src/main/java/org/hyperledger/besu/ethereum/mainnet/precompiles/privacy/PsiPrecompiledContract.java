@@ -44,6 +44,11 @@ import org.hyperledger.besu.plugin.data.Restriction;
 import org.hyperledger.besu.psi.PsiMain;
 
 import java.math.BigInteger;
+import java.io.BufferedWriter;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
@@ -54,7 +59,6 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.Bytes32;
-import org.hyperledger.besu.psi.PsiMain2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -67,9 +71,15 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
     PrivateTransactionProcessor privateTransactionProcessor;
     private final ExtendedPrivacyStorage extendedPrivacyStorage;
 
-    private static final String HY_BETA_SIGNATURE = "0x9faa3c91";
-    private static final String HX_ALPHA_SIGNATURE = "0xdb1d0fd5";
+    private static final String HY_BETA_SIGNATURE = "0xeea0e222";
+    private static final String HX_ALPHA_SIGNATURE = "0x8d4fda27";
     private static final String PEQT_SIGNATURE = "0x9fc14a35";
+
+    private static final String ALICE_SET_IS_READY_SIGNATURE = "0x79bf07e4";
+    private static final String BOB_SET_IS_READY_SIGNATURE = "0x50920be3";
+    private static final String CONSUME_SIGNATURE = "0x1dedc6f7";
+    private static final String ALICE_SET_LENGTH_SIGNATURE = "0xe6491f90";
+    private static final String BOB_SET_LENGTH_SIGNATURE = "0x23c1455c";
 
     private static final Supplier<SignatureAlgorithm> SIGNATURE_ALGORITHM =
                 Suppliers.memoize(SignatureAlgorithmFactory::getInstance);
@@ -112,7 +122,6 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
         this.privateStateRootResolver = privateStateRootResolver;
         this.privateStateGenesisAllocator = privateStateGenesisAllocator;
         this.extendedPrivacyStorage = null;
-        LOG.info("[PsiPrecompiledContract] -> created");
     }
 
     protected PsiPrecompiledContract(
@@ -205,127 +214,217 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
                 privacyGroupId,
                 messageFrame.getBlockValues().getNumber());
 
-        AtomicReference<Bytes> result = new AtomicReference<>(Bytes.EMPTY);
-        String extendedPrivacy = privateTransaction.getExtendedPrivacy().get().toHexString();
-        if(extendedPrivacy.equals("0x01")){
-            if(!privateTransaction.isContractCreation()) {
-                Optional<Bytes> privArgs = extendedPrivacyStorage.getPrivateArgsByPmt(Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))));
-                if (privArgs.isPresent()) {
-                    LOG.info("[PrivacyPrecompiledContract] SERVER privateArgs: ({}, {})", key, privArgs.get().toHexString());
-                    LOG.info("[PsiPrecompiledContract] -> executing psi");
-                    try {
-                        String psiType = "HFH99_ECC_COMPRESS";
-                        String serverSet = privArgs.get().toHexString();
-                        String clientSet = "";
-                        String[] psiMainArgs = {psiType, serverSet, clientSet};
+        return processPrivateTransaction(privateTransaction, disposablePrivateState, privacyGroupId, messageFrame, privateWorldStateUpdater);
+    }
 
-                        Set<ByteBuffer> intersectionSet = PsiMain.main(psiMainArgs);
+    private Bytes processPrivateTransaction(
+            final PrivateTransaction privateTransaction,
+            final MutableWorldState disposablePrivateState,
+            final Bytes32 privacyGroupId,
+            final MessageFrame messageFrame,
+            final WorldUpdater privateWorldStateUpdater) {
 
-                        String intersection = setToString(intersectionSet);
-                        result.set(Bytes.wrap(intersection.getBytes(Charset.forName("UTF-8"))));
-                    } catch (Exception e) {
-                        LOG.error("[PsiPrecompiledContract] -> Error: " + e.getMessage(), e);
-                    }
-                    LOG.info("[PsiPrecompiledContract] -> psi done");
-                } else {
-                    Optional<Bytes> retrievedKey = extendedPrivacyStorage.getPmtByContractAddress(privateTransaction.getTo().get());
-                    if (retrievedKey.isPresent()) {
-                        privArgs = extendedPrivacyStorage.getPrivateArgsByPmt(retrievedKey.get());
-                        if (privArgs.isPresent()) {
-                            LOG.info("[PsiPrecompiledContract] CLIENT executing psi - privateArgs: ({}, {})", new String(retrievedKey.get().toArray(), Charset.forName("UTF-8")), privArgs.get().toHexString());
-                            try {
-                                String psiType = "HFH99_ECC_COMPRESS";
-                                String serverSet = "";
-                                String clientSet = privArgs.get().toHexString();
-                                String[] psiMainArgs = {psiType, serverSet, clientSet};
+        final AtomicReference<Bytes> result = new AtomicReference<>(Bytes.EMPTY);
 
-                                Set<ByteBuffer> intersectionSet = PsiMain.main(psiMainArgs);
-
-                                String intersection = setToString(intersectionSet);
-                                result.set(Bytes.wrap(intersection.getBytes(Charset.forName("UTF-8"))));
-                            } catch (Exception e) {
-                                LOG.error("[PsiPrecompiledContract] -> Error: " + e.getMessage(), e);
-                            }
-                        } else {
-                            LOG.info("[PsiPrecompiledContract] privateArgs from key: {}, NOT PRESENT)", new String(retrievedKey.get().toArray(), Charset.forName("UTF-8")));
-                        }
-                    } else {
-                        LOG.info("[PsiPrecompiledContract] Key from privateContractAddress: {}, NOT PRESENT", key);
-                    }
-                }
-            }
-        }else if(extendedPrivacy.equals("0x02")){
-            Optional<Bytes> privArgs = extendedPrivacyStorage.getPrivateArgsByPmt(Bytes.wrap(key.getBytes(Charset.forName("UTF-8"))));
-            if(privateTransaction.isContractCreation() && privArgs.isPresent()){
-                LOG.info("[PsiPrecompiledContract] CLIENT executing psi load - privateArgs: ({}, {})", key, privArgs.get().toHexString());
-                try {
-                    String psiType = "HFH99_ECC_COMPRESS";
-                    String clientSet = privArgs.get().toHexString();
-                    String[] psiMainArgs = {psiType, "", clientSet, "", "", "", ""};
-
-                    String[] results = PsiMain2.main(psiMainArgs);
-                    String concatenatedResult = results[0] + "|" + results[1];
-                    result.set(Bytes.wrap(concatenatedResult.getBytes(Charset.forName("UTF-8"))));
-                } catch (Exception e) {
-                    LOG.error("[PsiPrecompiledContract] -> Error: " + e.getMessage(), e);
-                }
-            }else if(privArgs.isPresent()){
-                LOG.info("[PsiPrecompiledContract] SERVER loading set - privateArgs: ({}, {})", key, privArgs.get().toHexString());
-                Optional<Address> optionalTo = privateTransaction.getTo();
-                if(optionalTo.isPresent()){
-                    TransactionProcessingResult callResult = transactionCall(privateTransaction, disposablePrivateState, privacyGroupId, privateTransactionProcessor, messageFrame, privateWorldStateUpdater, optionalTo.get(), HY_BETA_SIGNATURE);
-
-                    String psiType = "HFH99_ECC_COMPRESS";
-                    String serverSet = privArgs.get().toHexString();
-                    String hyBetaString = decodeHexString(callResult.getOutput().toHexString());
-                    String[] psiMainArgs = {psiType, serverSet, "", hyBetaString, "", "", ""};
-
-                    String[] results = new String[0];
-                    try {
-                        results = PsiMain2.main(psiMainArgs);
-                    } catch (Exception e) {
-                        throw new RuntimeException(e);
-                    }
-                    String concatenatedResult = results[0] + "|" + results[1];
-                    result.set(Bytes.wrap(concatenatedResult.getBytes(Charset.forName("UTF-8"))));
-                }
-            }
-        }else if(extendedPrivacy.equals("0x03")){
+        if (isExtendedPrivacy(privateTransaction, "0x03")) {
             final Address privateContractAddress = privateTransaction.getTo().get();
+            final Optional<Bytes> aliceAddress = getAliceAddressFromExtendedStorage(privateContractAddress);
 
-            Optional<Bytes> beta = extendedPrivacyStorage.getBetaByContractAddress_Beta(Bytes.concatenate(privateContractAddress, Bytes.wrap("_Beta".getBytes(Charset.forName("UTF-8")))));
-            if (beta.isPresent()) {
-                byte[] byteArray = beta.get().toArray();
-                String betaString = new String(byteArray, StandardCharsets.UTF_8);
-                Optional<Bytes> retrievedKey = extendedPrivacyStorage.getPmtByContractAddress(privateContractAddress);
-                if (retrievedKey.isPresent()) {
-                    Optional<Bytes> privArgs = extendedPrivacyStorage.getPrivateArgsByPmt(retrievedKey.get());
-                    if (privArgs.isPresent()) {
-                        TransactionProcessingResult alphaCallResult = transactionCall(privateTransaction, disposablePrivateState, privacyGroupId, privateTransactionProcessor, messageFrame, privateWorldStateUpdater, privateContractAddress, HX_ALPHA_SIGNATURE);
-                        TransactionProcessingResult peqtCallResult = transactionCall(privateTransaction, disposablePrivateState, privacyGroupId, privateTransactionProcessor, messageFrame, privateWorldStateUpdater, privateContractAddress, PEQT_SIGNATURE);
+            final Bytes methodCalled = privateTransaction.getPayload().slice(0, 4);
 
-
-                        LOG.info("[PsiPrecompiledContract] CLIENT executing psi 2 - beta: {}, privateArgs: {}, alpha: {}, peqt: {}", betaString, privArgs.get().toHexString(), decodeHexString(alphaCallResult.getOutput().toHexString()), decodeHexString(peqtCallResult.getOutput().toHexString()));
-
-                        String psiType = "HFH99_ECC_COMPRESS";
-                        String clientSet = privArgs.get().toHexString();
-                        String alphaString = decodeHexString(alphaCallResult.getOutput().toHexString());
-                        String peqtString = decodeHexString(peqtCallResult.getOutput().toHexString());
-                        String[] psiMainArgs = {psiType, "", clientSet, "", alphaString, peqtString, betaString};
-
-                        String[] results = new String[0];
-                        try {
-                            results = PsiMain2.main(psiMainArgs);
-                        } catch (Exception e) {
-                            throw new RuntimeException(e);
-                        }
-                        result.set(Bytes.wrap(results[0].getBytes(Charset.forName("UTF-8"))));
-                    }
-                }
+            if (isAliceSetIsReadyMethod(methodCalled, aliceAddress)) {
+                return handleAliceSetIsReady(privateTransaction, disposablePrivateState, privacyGroupId, messageFrame, privateWorldStateUpdater, privateContractAddress);
+            } else if (isBobSetIsReadyMethod(methodCalled, aliceAddress)) {
+                return handleBobSetIsReady(privateTransaction, disposablePrivateState, privacyGroupId, messageFrame, privateWorldStateUpdater, privateContractAddress);
+            } else if (isConsumeMethod(methodCalled, aliceAddress)) {
+                return handleConsume(privateTransaction, disposablePrivateState, privacyGroupId, messageFrame, privateWorldStateUpdater, privateContractAddress);
             }
         }
 
         return result.get();
+    }
+
+    private Bytes handleAliceSetIsReady(
+            final PrivateTransaction privateTransaction,
+            final MutableWorldState disposablePrivateState,
+            final Bytes32 privacyGroupId,
+            final MessageFrame messageFrame,
+            final WorldUpdater privateWorldStateUpdater,
+            final Address privateContractAddress) {
+
+        final TransactionProcessingResult bobSetLength_CallResult =
+                transactionCall(privateTransaction, disposablePrivateState, privacyGroupId,
+                        privateTransactionProcessor, messageFrame,
+                        privateWorldStateUpdater, privateContractAddress,
+                        BOB_SET_LENGTH_SIGNATURE);
+
+        if (bobSetLength_CallResult.isSuccessful()) {
+            final int bobSetLength = getSetLength(bobSetLength_CallResult);
+
+            final Optional<Bytes> privateSet = getPrivateSetFromExtendedStorage(privateContractAddress);
+            if (privateSet.isPresent()) {
+                final String[] psiMainArgs = new String[]{"HFH99_ECC_COMPRESS", "", privateSet.get().toHexString(), "", "", "", "", Integer.toString(bobSetLength), ""};
+                try {
+                    final String[] results = PsiMain.main(psiMainArgs);
+
+                    putBetaInExtendedStorage(privateContractAddress, results[0]);
+                    writeToFile("hyBeta.txt", results[1]);
+
+                    String concatenatedResult = results[0] + "|" + results[1];
+                    return Bytes.wrap(concatenatedResult.getBytes(Charset.forName("UTF-8")));
+                } catch (Exception e) {
+                    LOG.error("Error processing PSI: {}", e.getMessage(), e);
+                    return Bytes.EMPTY;
+                }
+            }
+        }
+        return Bytes.EMPTY;
+    }
+
+    private Bytes handleBobSetIsReady(
+            final PrivateTransaction privateTransaction,
+            final MutableWorldState disposablePrivateState,
+            final Bytes32 privacyGroupId,
+            final MessageFrame messageFrame,
+            final WorldUpdater privateWorldStateUpdater,
+            final Address privateContractAddress) {
+
+        final TransactionProcessingResult aliceSetLength_CallResult =
+                transactionCall(privateTransaction, disposablePrivateState, privacyGroupId,
+                        privateTransactionProcessor, messageFrame,
+                        privateWorldStateUpdater, privateContractAddress,
+                        ALICE_SET_LENGTH_SIGNATURE);
+        final TransactionProcessingResult hyBeta_CallResult =
+                transactionCall(privateTransaction, disposablePrivateState, privacyGroupId,
+                        privateTransactionProcessor, messageFrame,
+                        privateWorldStateUpdater, privateContractAddress,
+                        HY_BETA_SIGNATURE);
+
+
+        if (aliceSetLength_CallResult.isSuccessful() && hyBeta_CallResult.isSuccessful()) {
+            final int aliceSetLength = getSetLength(aliceSetLength_CallResult);
+
+            final Optional<Bytes> privateSet = getPrivateSetFromExtendedStorage(privateContractAddress);
+            if (privateSet.isPresent()) {
+                String hyBetaString = decodeHexString(hyBeta_CallResult.getOutput().toHexString());
+                final String[] psiMainArgs = new String[]{"HFH99_ECC_COMPRESS", privateSet.get().toHexString(), "", hyBetaString, "", "", "", "", Integer.toString(aliceSetLength)};
+                try {
+                    final String[] results = PsiMain.main(psiMainArgs);
+
+                    writeToFile("hxAlpha.txt", results[0]);
+                    writeToFile("peqt.txt", results[1]);
+
+                    String concatenatedResult = results[0] + "|" + results[1];
+                    return Bytes.wrap(concatenatedResult.getBytes(Charset.forName("UTF-8")));
+                } catch (Exception e) {
+                    LOG.error("Error processing PSI: {}", e.getMessage(), e);
+                    return Bytes.EMPTY;
+                }
+            }
+        }
+        return Bytes.EMPTY;
+    }
+
+    private Bytes handleConsume(
+            final PrivateTransaction privateTransaction,
+            final MutableWorldState disposablePrivateState,
+            final Bytes32 privacyGroupId,
+            final MessageFrame messageFrame,
+            final WorldUpdater privateWorldStateUpdater,
+            final Address privateContractAddress) {
+
+            Optional<Bytes> beta = getBetaFromExtendedStorage(privateContractAddress);
+            if (beta.isPresent()) {
+                byte[] byteArray = beta.get().toArray();
+                String betaString = new String(byteArray, StandardCharsets.UTF_8);
+
+                final Optional<Bytes> privateSet = getPrivateSetFromExtendedStorage(privateContractAddress);
+            if (privateSet.isPresent()) {
+                final TransactionProcessingResult hxAlpha_CallResult =
+                        transactionCall(privateTransaction, disposablePrivateState, privacyGroupId,
+                                privateTransactionProcessor, messageFrame,
+                                privateWorldStateUpdater, privateContractAddress,
+                                HX_ALPHA_SIGNATURE);
+                final TransactionProcessingResult peqt_CallResult  =
+                        transactionCall(privateTransaction, disposablePrivateState, privacyGroupId,
+                                privateTransactionProcessor, messageFrame,
+                                privateWorldStateUpdater, privateContractAddress,
+                                PEQT_SIGNATURE);
+                final TransactionProcessingResult bobSetLength_CallResult  =
+                        transactionCall(privateTransaction, disposablePrivateState, privacyGroupId,
+                                privateTransactionProcessor, messageFrame,
+                                privateWorldStateUpdater, privateContractAddress,
+                                BOB_SET_LENGTH_SIGNATURE);
+                if(hxAlpha_CallResult.isSuccessful() && peqt_CallResult.isSuccessful() && bobSetLength_CallResult.isSuccessful()){
+                    final int bobSetLength = getSetLength(bobSetLength_CallResult);
+                    String hxAlphaString = decodeHexString(hxAlpha_CallResult.getOutput().toHexString());
+                    String peqtString = decodeHexString(peqt_CallResult.getOutput().toHexString());
+                    final String[] psiMainArgs = new String[]{"HFH99_ECC_COMPRESS", "", privateSet.get().toHexString(), "", hxAlphaString, peqtString, betaString, Integer.toString(bobSetLength), ""};
+                    try {
+                        final String[] results = PsiMain.main(psiMainArgs);
+
+                        LOG.info("Intersection: {}", results[0]);
+                        return Bytes.wrap(results[0].getBytes(Charset.forName("UTF-8")));
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            }
+        }
+        return Bytes.EMPTY;
+    }
+
+    private boolean isExtendedPrivacy(final PrivateTransaction privateTransaction, final String extendedPrivacyType) {
+        return privateTransaction.getExtendedPrivacy().get().toHexString().equals(extendedPrivacyType);
+    }
+
+    private Optional<Bytes> getAliceAddressFromExtendedStorage(final Address privateContractAddress) {
+        return extendedPrivacyStorage.getAliceAddressByContractAddress_Alice(
+                Bytes.concatenate(privateContractAddress, Bytes.wrap("_Alice".getBytes(Charset.forName("UTF-8")))));
+    }
+
+    private Optional<Bytes> getPrivateSetFromExtendedStorage(final Address privateContractAddress) {
+        return extendedPrivacyStorage.getPrivateSetByContractAddress(privateContractAddress);
+    }
+
+    private Optional<Bytes> getBetaFromExtendedStorage(final Address privateContractAddress) {
+        return extendedPrivacyStorage.getBetaByContractAddress_Beta(
+                Bytes.concatenate(privateContractAddress, Bytes.wrap("_Beta".getBytes(Charset.forName("UTF-8")))));
+    }
+
+    private void putBetaInExtendedStorage(final Address privateContractAddress, final String Beta) {
+        final ExtendedPrivacyStorage.Updater updater = extendedPrivacyStorage.updater();
+        updater.putBetaByContractAddress_Beta(
+                Bytes.concatenate(privateContractAddress, Bytes.wrap("_Beta".getBytes(Charset.forName("UTF-8")))),
+                Bytes.wrap(Beta.getBytes(Charset.forName("UTF-8"))));
+        updater.commit();
+    }
+
+    private boolean isAliceSetIsReadyMethod(final Bytes methodCalled, final Optional<Bytes> aliceAddress) {
+        return methodCalled.equals(Bytes.fromHexString(ALICE_SET_IS_READY_SIGNATURE)) && aliceAddress.isPresent();
+    }
+
+    private boolean isBobSetIsReadyMethod(final Bytes methodCalled, final Optional<Bytes> aliceAddress) {
+        return methodCalled.equals(Bytes.fromHexString(BOB_SET_IS_READY_SIGNATURE)) && !aliceAddress.isPresent();
+    }
+
+    private boolean isConsumeMethod(final Bytes methodCalled, final Optional<Bytes> aliceAddress) {
+        return methodCalled.equals(Bytes.fromHexString(CONSUME_SIGNATURE)) && aliceAddress.isPresent();
+    }
+
+    private int getSetLength(final TransactionProcessingResult result) {
+        return new BigInteger(1, result.getOutput().slice(28, 4).toArray()).intValue();
+    }
+
+    private void writeToFile(final String fileName, final String content) {
+        try {
+            final Path filePath = Paths.get(fileName);
+            final BufferedWriter writer = Files.newBufferedWriter(filePath, StandardCharsets.UTF_8);
+            writer.write(content);
+            writer.close();
+        } catch (IOException e) {
+            LOG.info("Error writing to file {}: {}", fileName, e.getMessage());
+        }
     }
 
     protected void maybeApplyGenesisToPrivateWorldState(
@@ -399,26 +498,6 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
         }
 
         return true;
-    }
-
-    private static String setToString(final Set<ByteBuffer> set) {
-        StringBuilder hexString = new StringBuilder("0x");
-        for (ByteBuffer byteBuffer : set) {
-            // Crear un array de bytes para almacenar los datos del ByteBuffer
-            byte[] bytes = new byte[byteBuffer.limit()];
-
-            // Rebobinar el ByteBuffer para leer desde el principio
-            byteBuffer.rewind();
-
-            // Copiar los datos del ByteBuffer al array de bytes
-            byteBuffer.get(bytes);
-
-            // Convertir el array de bytes a una cadena en formato hexadecimal
-            for (byte b : bytes) {
-                hexString.append(String.format("%02X", b));
-            }
-        }
-        return hexString.toString().trim();
     }
 
     public static String decodeHexString(final String inputHex) {

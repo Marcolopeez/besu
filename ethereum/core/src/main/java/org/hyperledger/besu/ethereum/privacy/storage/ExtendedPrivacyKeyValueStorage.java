@@ -14,18 +14,18 @@ public class ExtendedPrivacyKeyValueStorage implements ExtendedPrivacyStorage {
   }
 
   @Override
-  public Optional<Bytes> getPrivateArgsByPmt(final Bytes pmt) {
-    return get(pmt);
-  }
-
-  @Override
-  public Optional<Bytes> getPmtByContractAddress(final Bytes contractAddress) {
+  public Optional<Bytes> getPrivateSetByContractAddress(final Bytes contractAddress) {
     return get(contractAddress);
   }
 
   @Override
   public Optional<Bytes> getBetaByContractAddress_Beta(final Bytes contractAddress_Beta) {
     return get(contractAddress_Beta);
+  }
+
+  @Override
+  public Optional<Bytes> getAliceAddressByContractAddress_Alice(final Bytes contractAddress_Alice) {
+    return get(contractAddress_Alice);
   }
 
   private Optional<Bytes> get(final Bytes key) {
@@ -46,16 +46,9 @@ public class ExtendedPrivacyKeyValueStorage implements ExtendedPrivacyStorage {
     }
 
     @Override
-    public ExtendedPrivacyStorage.Updater putPrivateArgsByPmt(
-            final Bytes pmt, final Bytes privateArgs) {
-      set(pmt, privateArgs);
-      return this;
-    }
-
-    @Override
-    public ExtendedPrivacyStorage.Updater putPmtByContractAddress(
-            final Bytes contractAddress, final Bytes pmt) {
-      set(contractAddress, pmt);
+    public ExtendedPrivacyStorage.Updater putPrivateSetByContractAddress(
+            final Bytes contractAddress, final Bytes privateSet) {
+      set(contractAddress, privateSet);
       return this;
     }
 
@@ -63,6 +56,13 @@ public class ExtendedPrivacyKeyValueStorage implements ExtendedPrivacyStorage {
     public ExtendedPrivacyStorage.Updater putBetaByContractAddress_Beta(
             final Bytes contractAddress_Beta, final Bytes beta) {
       set(contractAddress_Beta, beta);
+      return this;
+    }
+
+    @Override
+    public ExtendedPrivacyStorage.Updater putAliceAddressByContractAddress_Alice(
+            final Bytes contractAddress_Alice, final Bytes aliceAddress) {
+      set(contractAddress_Alice, aliceAddress);
       return this;
     }
 
