@@ -335,6 +335,10 @@ public class ProtocolSpecBuilder {
             (FlexiblePrivacyPrecompiledContract) precompileContractRegistry.get(FLEXIBLE_PRIVACY);
         flexiblePrivacyPrecompiledContract.setPrivateTransactionProcessor(
             privateTransactionProcessor);
+
+        final PsiPrecompiledContract psiPrecompiledContract =
+              (PsiPrecompiledContract) precompileContractRegistry.get(Address.PSI);
+        psiPrecompiledContract.setPrivateTransactionProcessor(privateTransactionProcessor);
       } else {
         final PrivacyPrecompiledContract privacyPrecompiledContract =
             (PrivacyPrecompiledContract) precompileContractRegistry.get(DEFAULT_PRIVACY);

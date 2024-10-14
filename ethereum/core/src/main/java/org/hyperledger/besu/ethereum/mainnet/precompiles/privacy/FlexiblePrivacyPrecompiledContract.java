@@ -14,6 +14,8 @@
  */
 package org.hyperledger.besu.ethereum.mainnet.precompiles.privacy;
 
+import org.hyperledger.besu.datatypes.Address;
+import org.hyperledger.besu.datatypes.Wei;
 import static org.hyperledger.besu.datatypes.Hash.fromPlugin;
 import static org.hyperledger.besu.ethereum.core.PrivacyParameters.FLEXIBLE_PRIVACY_PROXY;
 import static org.hyperledger.besu.ethereum.mainnet.PrivateStateUtils.KEY_IS_PERSISTING_PRIVATE_STATE;
@@ -41,6 +43,8 @@ import org.hyperledger.besu.ethereum.privacy.storage.PrivateMetadataUpdater;
 import org.hyperledger.besu.ethereum.processing.TransactionProcessingResult;
 import org.hyperledger.besu.ethereum.rlp.BytesValueRLPInput;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateArchive;
+import org.hyperledger.besu.evm.account.EvmAccount;
+import org.hyperledger.besu.evm.account.MutableAccount;
 import org.hyperledger.besu.evm.frame.MessageFrame;
 import org.hyperledger.besu.evm.gascalculator.GasCalculator;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
@@ -51,6 +55,9 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.Bytes32;
@@ -64,6 +71,8 @@ public class FlexiblePrivacyPrecompiledContract extends PrivacyPrecompiledContra
 
   private final Subscribers<PrivateTransactionObserver> privateTransactionEventObservers =
       Subscribers.create();
+
+  private PrivateTransaction lastPrivateTransaction;
 
   public FlexiblePrivacyPrecompiledContract(
       final GasCalculator gasCalculator,
@@ -88,6 +97,7 @@ public class FlexiblePrivacyPrecompiledContract extends PrivacyPrecompiledContra
         privacyParameters.getPrivateWorldStateArchive(),
         privacyParameters.getPrivateStateRootResolver(),
         privacyParameters.getPrivateStateGenesisAllocator());
+    lastPrivateTransaction = new PrivateTransaction.Builder().build();
   }
 
   public long addPrivateTransactionObserver(final PrivateTransactionObserver observer) {
@@ -169,6 +179,11 @@ public class FlexiblePrivacyPrecompiledContract extends PrivacyPrecompiledContra
         privateWorldStateUpdater,
         privateFrom)) {
       return Bytes.EMPTY;
+    }
+
+    if (privateTransaction.hasExtendedPrivacy() && privateTransaction.getExtendedPrivacy().get().toHexString().equals("0x03") && !privateTransaction.equals(lastPrivateTransaction)) {
+      lastPrivateTransaction = privateTransaction;
+      privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
     }
 
     final TransactionProcessingResult result =

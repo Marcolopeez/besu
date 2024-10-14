@@ -27,6 +27,7 @@ import org.hyperledger.besu.ethereum.privacy.PrivateStateGenesisAllocator;
 import org.hyperledger.besu.ethereum.privacy.PrivateStateRootResolver;
 import org.hyperledger.besu.ethereum.privacy.PrivateTransaction;
 import org.hyperledger.besu.ethereum.privacy.PrivateTransactionProcessor;
+import org.hyperledger.besu.ethereum.privacy.VersionedPrivateTransaction;
 import org.hyperledger.besu.ethereum.privacy.storage.ExtendedPrivacyStorage;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivateMetadataUpdater;
 import org.hyperledger.besu.ethereum.processing.TransactionProcessingResult;
@@ -52,11 +53,13 @@ import java.nio.file.Paths;
 import java.nio.ByteBuffer;
 import java.nio.charset.Charset;
 import java.nio.charset.StandardCharsets;
+import java.util.List;
 import java.util.Base64;
 import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 
+import com.google.common.base.Splitter;
 import org.apache.tuweni.bytes.Bytes;
 import org.apache.tuweni.bytes.Bytes32;
 import org.slf4j.Logger;
@@ -81,7 +84,7 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
     private static final String BOB_SET_LENGTH_SIGNATURE = "0x23c1455c";
 
     private static final Supplier<SignatureAlgorithm> SIGNATURE_ALGORITHM =
-                Suppliers.memoize(SignatureAlgorithmFactory::getInstance);
+            Suppliers.memoize(SignatureAlgorithmFactory::getInstance);
 
     // Dummy signature for transactions to not fail being processed.
     private static final SECPSignature FAKE_SIGNATURE =
@@ -155,7 +158,7 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
             return Bytes.EMPTY;
         }
 
-        final String key = input.toBase64String();
+        final String key = input.slice(0, 32).toBase64String();
         final ReceiveResponse receiveResponse;
         try {
             receiveResponse = getReceiveResponse(key);
@@ -167,34 +170,24 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
         final BytesValueRLPInput bytesValueRLPInput =
                 new BytesValueRLPInput(
                         Bytes.wrap(Base64.getDecoder().decode(receiveResponse.getPayload())), false);
+        final VersionedPrivateTransaction versionedPrivateTransaction =
+                VersionedPrivateTransaction.readFrom(bytesValueRLPInput);
         final PrivateTransaction privateTransaction =
-                PrivateTransaction.readFrom(bytesValueRLPInput.readAsRlp());
+                versionedPrivateTransaction.getPrivateTransaction();
 
         final Bytes privateFrom = privateTransaction.getPrivateFrom();
         if (!privateFromMatchesSenderKey(privateFrom, receiveResponse.getSenderKey())) {
+
             return Bytes.EMPTY;
         }
 
-        final Bytes32 privacyGroupId =
-                Bytes32.wrap(Bytes.fromBase64String(receiveResponse.getPrivacyGroupId()));
+        final Optional<Bytes> maybeGroupId = privateTransaction.getPrivacyGroupId();
+        if (maybeGroupId.isEmpty()) {
 
-        try {
-            if (privateTransaction.getPrivateFor().isEmpty()
-                    && !enclave
-                    .retrievePrivacyGroup(privacyGroupId.toBase64String())
-                    .getMembers()
-                    .contains(privateFrom.toBase64String())) {
-                return Bytes.EMPTY;
-            }
-        } catch (final EnclaveClientException e) {
-            // This exception is thrown when the privacy group can not be found
             return Bytes.EMPTY;
-        } catch (final EnclaveServerException e) {
-            throw new IllegalStateException(
-                    "Enclave is responding with an error, perhaps it has a misconfiguration?", e);
-        } catch (final EnclaveIOException e) {
-            throw new IllegalStateException("Can not communicate with enclave, is it up?", e);
         }
+
+        final Bytes32 privacyGroupId = Bytes32.wrap(maybeGroupId.get());
 
         final PrivateMetadataUpdater privateMetadataUpdater =
                 messageFrame.getContextVariable(KEY_PRIVATE_METADATA_UPDATER);
@@ -212,7 +205,7 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
                 privateWorldStateUpdater,
                 privacyGroupId,
                 messageFrame.getBlockValues().getNumber());
-
+        LOG.info("Processing private Transaction");
         return processPrivateTransaction(privateTransaction, disposablePrivateState, privacyGroupId, messageFrame, privateWorldStateUpdater);
     }
 
@@ -332,12 +325,12 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
             final WorldUpdater privateWorldStateUpdater,
             final Address privateContractAddress) {
 
-            Optional<Bytes> beta = getBetaFromExtendedStorage(privateContractAddress);
-            if (beta.isPresent()) {
-                byte[] byteArray = beta.get().toArray();
-                String betaString = new String(byteArray, StandardCharsets.UTF_8);
+        Optional<Bytes> beta = getBetaFromExtendedStorage(privateContractAddress);
+        if (beta.isPresent()) {
+            byte[] byteArray = beta.get().toArray();
+            String betaString = new String(byteArray, StandardCharsets.UTF_8);
 
-                final Optional<Bytes> privateSet = getPrivateSetFromExtendedStorage(privateContractAddress);
+            final Optional<Bytes> privateSet = getPrivateSetFromExtendedStorage(privateContractAddress);
             if (privateSet.isPresent()) {
                 final TransactionProcessingResult bobMetadata_CallResult =
                         transactionCall(privateTransaction, disposablePrivateState, privacyGroupId,
