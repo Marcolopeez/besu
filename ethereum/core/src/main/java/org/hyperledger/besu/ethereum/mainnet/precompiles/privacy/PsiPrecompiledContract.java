@@ -71,12 +71,11 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
     PrivateTransactionProcessor privateTransactionProcessor;
     private final ExtendedPrivacyStorage extendedPrivacyStorage;
 
-    private static final String HY_BETA_SIGNATURE = "0xeea0e222";
-    private static final String HX_ALPHA_SIGNATURE = "0x8d4fda27";
-    private static final String PEQT_SIGNATURE = "0x9fc14a35";
+    private static final String ALICE_METADATA_SIGNATURE = "0xd8e32925";
+    private static final String BOB_METADATA_SIGNATURE = "0xa676cc06";
 
-    private static final String ALICE_SET_IS_READY_SIGNATURE = "0x79bf07e4";
-    private static final String BOB_SET_IS_READY_SIGNATURE = "0x50920be3";
+    private static final String ALICE_COMPLETED_SET_LOADING_SIGNATURE = "0xe461725a";
+    private static final String BOB_COMPLETED_SET_LOADING_SIGNATURE = "0xfc04cda7";
     private static final String CONSUME_SIGNATURE = "0x1dedc6f7";
     private static final String ALICE_SET_LENGTH_SIGNATURE = "0xe6491f90";
     private static final String BOB_SET_LENGTH_SIGNATURE = "0x23c1455c";
@@ -294,19 +293,19 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
                         privateTransactionProcessor, messageFrame,
                         privateWorldStateUpdater, privateContractAddress,
                         ALICE_SET_LENGTH_SIGNATURE);
-        final TransactionProcessingResult hyBeta_CallResult =
+        final TransactionProcessingResult aliceMetadata_CallResult =
                 transactionCall(privateTransaction, disposablePrivateState, privacyGroupId,
                         privateTransactionProcessor, messageFrame,
                         privateWorldStateUpdater, privateContractAddress,
-                        HY_BETA_SIGNATURE);
+                        ALICE_METADATA_SIGNATURE);
 
 
-        if (aliceSetLength_CallResult.isSuccessful() && hyBeta_CallResult.isSuccessful()) {
+        if (aliceSetLength_CallResult.isSuccessful() && aliceMetadata_CallResult.isSuccessful()) {
             final int aliceSetLength = getSetLength(aliceSetLength_CallResult);
 
             final Optional<Bytes> privateSet = getPrivateSetFromExtendedStorage(privateContractAddress);
             if (privateSet.isPresent()) {
-                String hyBetaString = decodeHexString(hyBeta_CallResult.getOutput().toHexString());
+                String hyBetaString = decodeHexString(aliceMetadata_CallResult.getOutput().toHexString());
                 final String[] psiMainArgs = new String[]{"HFH99_ECC_COMPRESS", privateSet.get().toHexString(), "", hyBetaString, "", "", "", "", Integer.toString(aliceSetLength)};
                 try {
                     final String[] results = PsiMain.main(psiMainArgs);
@@ -340,25 +339,21 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
 
                 final Optional<Bytes> privateSet = getPrivateSetFromExtendedStorage(privateContractAddress);
             if (privateSet.isPresent()) {
-                final TransactionProcessingResult hxAlpha_CallResult =
+                final TransactionProcessingResult bobMetadata_CallResult =
                         transactionCall(privateTransaction, disposablePrivateState, privacyGroupId,
                                 privateTransactionProcessor, messageFrame,
                                 privateWorldStateUpdater, privateContractAddress,
-                                HX_ALPHA_SIGNATURE);
-                final TransactionProcessingResult peqt_CallResult  =
-                        transactionCall(privateTransaction, disposablePrivateState, privacyGroupId,
-                                privateTransactionProcessor, messageFrame,
-                                privateWorldStateUpdater, privateContractAddress,
-                                PEQT_SIGNATURE);
+                                BOB_METADATA_SIGNATURE);
                 final TransactionProcessingResult bobSetLength_CallResult  =
                         transactionCall(privateTransaction, disposablePrivateState, privacyGroupId,
                                 privateTransactionProcessor, messageFrame,
                                 privateWorldStateUpdater, privateContractAddress,
                                 BOB_SET_LENGTH_SIGNATURE);
-                if(hxAlpha_CallResult.isSuccessful() && peqt_CallResult.isSuccessful() && bobSetLength_CallResult.isSuccessful()){
+                if(bobMetadata_CallResult.isSuccessful() && bobSetLength_CallResult.isSuccessful()){
                     final int bobSetLength = getSetLength(bobSetLength_CallResult);
-                    String hxAlphaString = decodeHexString(hxAlpha_CallResult.getOutput().toHexString());
-                    String peqtString = decodeHexString(peqt_CallResult.getOutput().toHexString());
+                    List<String> bobMetadataDecode = Splitter.on('|').splitToList(decodeHexString(bobMetadata_CallResult.getOutput().toHexString()));
+                    String hxAlphaString = bobMetadataDecode.get(0);
+                    String peqtString = bobMetadataDecode.get(1);
                     final String[] psiMainArgs = new String[]{"HFH99_ECC_COMPRESS", "", privateSet.get().toHexString(), "", hxAlphaString, peqtString, betaString, Integer.toString(bobSetLength), ""};
                     try {
                         final String[] results = PsiMain.main(psiMainArgs);
@@ -401,11 +396,11 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
     }
 
     private boolean isAliceSetIsReadyMethod(final Bytes methodCalled, final Optional<Bytes> aliceAddress) {
-        return methodCalled.equals(Bytes.fromHexString(ALICE_SET_IS_READY_SIGNATURE)) && aliceAddress.isPresent();
+        return methodCalled.equals(Bytes.fromHexString(ALICE_COMPLETED_SET_LOADING_SIGNATURE)) && aliceAddress.isPresent();
     }
 
     private boolean isBobSetIsReadyMethod(final Bytes methodCalled, final Optional<Bytes> aliceAddress) {
-        return methodCalled.equals(Bytes.fromHexString(BOB_SET_IS_READY_SIGNATURE)) && !aliceAddress.isPresent();
+        return methodCalled.equals(Bytes.fromHexString(BOB_COMPLETED_SET_LOADING_SIGNATURE)) && !aliceAddress.isPresent();
     }
 
     private boolean isConsumeMethod(final Bytes methodCalled, final Optional<Bytes> aliceAddress) {
