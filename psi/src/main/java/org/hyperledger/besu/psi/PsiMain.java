@@ -20,70 +20,37 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Properties;
 import java.util.Set;
 
 import com.google.common.base.Splitter;
 
-
 public class PsiMain {
     private static final Logger LOGGER = LoggerFactory.getLogger(PsiMain.class);
+    private static final String ELEMENT_DELIMITER = ":";
+    private static final int BLOCK_SIZE = 32;
 
-    public static String[] main(final String[] args) throws Exception {
-        Properties log4jProperties = new Properties();
-        log4jProperties.load(PsiMain.class.getResourceAsStream("/log4j.properties"));
-        PropertyConfigurator.configure(log4jProperties);
-
+    public static String[] executeClient1(final String psiType, final String stringClientSet, final int serverSetSize) {
         // Set VM options to link to the native libraries
         setVMOptions();
+        PsiConfig config = buildPsiType(psiType);
+        PsiClient<ByteBuffer> client = createClient(config);
 
-        PsiConfig config = buildPsiType(args[0]);
-
-        RpcManager rpcManager = new MemoryRpcManager(2);
-        Rpc serverRpc = rpcManager.getRpc(0);
-        Rpc clientRpc = rpcManager.getRpc(1);
-        PsiServer<ByteBuffer> server = PsiFactory.createServer(serverRpc, clientRpc.ownParty(), config);
-        PsiClient<ByteBuffer> client = PsiFactory.createClient(clientRpc, serverRpc.ownParty(), config);
-
-        server.setTaskId(5);
-        client.setTaskId(5);
-
-        // args[0] -> PsiType (HFH99_ECC_COMPRESS)
-        // args[1] -> ServerSet (Bob)
-        // args[2] -> ClientSet (Alice)
-        // args[3] -> hyBeta
-        // args[4] -> hxAlpha
-        // args[5] -> peqt
-        // args[6] -> Beta
-        // args[7] -> ServerSetLength (Bob)
-        // args[8] -> ClientSetLength (Alice)
-
-        if(args[1].isEmpty()){
-            byte[] bytesClientSet = hexStringToByteArray(args[2].substring(2)); // (PrivateArgs without '0x')
-            if(args[4].isEmpty()){
-                return executeClient1(client, bytesClientSet, Integer.parseInt(args[7]));
-            }else{
-                return executeClient2(client, bytesClientSet, args[4], args[5], args[6], Integer.parseInt(args[7]));
-            }
-        }else{
-            byte[] bytesServerSet = hexStringToByteArray(args[1].substring(2)); // (PrivateArgs without '0x')
-            return executeServer(server, bytesServerSet, args[3], Integer.parseInt(args[8]));
-        }
-    }
-
-    private static String[] executeClient1(final PsiClient<ByteBuffer> client, final byte[] bytesClientSet, final int serverSetSize){
+        byte[] bytesClientSet = hexStringToByteArray(stringClientSet.substring(2)); // (PrivateArgs without '0x')
         Set<ByteBuffer> clientSet = convertByteArrayToByteBufferSet(bytesClientSet);
+
         BigInteger beta = client.psi_1(clientSet.size(), serverSetSize, clientSet, serverSetSize);
         List<byte[]> hyBetaPayload = client.psi_2(serverSetSize, clientSet.size());
 
-        String betaString = beta.toString();
-        String hyBetaHexString = bytesListToHexString(hyBetaPayload);
-
-        return new String[] {betaString, hyBetaHexString};
+        return new String[]{beta.toString(), bytesListToHexString(hyBetaPayload)};
     }
 
+    public static String[] executeClient2(final String psiType, final String stringClientSet, final String hxAlphaHexString, final String peqtHexString, final String betaString, final int serverSetSize) {
+        // Set VM options to link to the native libraries
+        setVMOptions();
+        PsiConfig config = buildPsiType(psiType);
+        PsiClient<ByteBuffer> client = createClient(config);
 
-    private static String[] executeClient2(final PsiClient<ByteBuffer> client, final byte[] bytesClientSet, final String hxAlphaHexString, final String peqtHexString, final String betaString, final int serverSetSize) {
+        byte[] bytesClientSet = hexStringToByteArray(stringClientSet.substring(2)); // (PrivateArgs without '0x')
         Set<ByteBuffer> clientSet = convertByteArrayToByteBufferSet(bytesClientSet);
         List<List<byte[]>> reconstructedResult = new ArrayList<>();
         reconstructedResult.add(hexStringToBytesList(hxAlphaHexString));
@@ -91,27 +58,30 @@ public class PsiMain {
 
         try {
             Set<ByteBuffer> intersectionSet = client.psi_3(clientSet.size(), serverSetSize, clientSet, serverSetSize, new BigInteger(betaString), reconstructedResult);
-            String intersectionSetString = setToString(intersectionSet);
-            return new String[] {intersectionSetString};
+            return new String[]{setToString(intersectionSet)};
         } catch (MpcAbortException e) {
-            LOGGER.error("Ocurrió un error: " + e.getMessage(), e);
+            LOGGER.error("Error durante la ejecución del cliente 2: {}", e.getMessage(), e);
             return new String[0];
         }
     }
 
-    private static String[] executeServer(final PsiServer<ByteBuffer> server, final byte[] bytesServerSet, final String hyBetaHexString, final int clientSetSize) {
+    public static String[] executeServer(final String psiType, final String stringServerSet, final String hyBetaHexString, final int clientSetSize) {
+        // Set VM options to link to the native libraries
+        setVMOptions();
+        PsiConfig config = buildPsiType(psiType);
+        PsiServer<ByteBuffer> server = createServer(config);
+
+        byte[] bytesServerSet = hexStringToByteArray(stringServerSet.substring(2)); // (PrivateArgs without '0x')
         Set<ByteBuffer> serverSet = convertByteArrayToByteBufferSet(bytesServerSet);
         List<byte[]> reconstructedBeta = hexStringToBytesList(hyBetaHexString);
 
         try {
             List<byte[]>[] result = server.psi_1(serverSet.size(), clientSetSize, serverSet, clientSetSize, reconstructedBeta);
-            String hxAlphaHexString = bytesListToHexString(result[0]);
-            String peqtHexString = bytesListToHexString(result[1]);
-            return new String[] {hxAlphaHexString, peqtHexString};
+            return new String[]{bytesListToHexString(result[0]), bytesListToHexString(result[1])};
         } catch (MpcAbortException e) {
-            LOGGER.error("Ocurrió un error: " + e.getMessage(), e);
+            LOGGER.error("Error durante la ejecución del servidor: {}", e.getMessage(), e);
+            return new String[0];
         }
-        return new String[0];
     }
 
     private static void setVMOptions() {
@@ -123,11 +93,29 @@ public class PsiMain {
             System.load(libPathTool + "/libmpc4j-native-tool.so");
             System.load(libPathFhe + "/libmpc4j-native-fhe.so");
         } catch (UnsatisfiedLinkError e) {
-            System.err.println("Error al cargar la biblioteca nativa: " + e.getMessage());
+            LOGGER.error("Error al cargar la biblioteca nativa: {}", e.getMessage());
         }
     }
 
-    public static PsiConfig buildPsiType(final String psiType){
+    private static PsiClient<ByteBuffer> createClient(final PsiConfig config) {
+        RpcManager rpcManager = new MemoryRpcManager(2);
+        Rpc serverRpc = rpcManager.getRpc(0);
+        Rpc clientRpc = rpcManager.getRpc(1);
+        PsiClient<ByteBuffer> client = PsiFactory.createClient(clientRpc, serverRpc.ownParty(), config);
+        client.setTaskId(5);
+        return client;
+    }
+
+    private static PsiServer<ByteBuffer> createServer(final PsiConfig config) {
+        RpcManager rpcManager = new MemoryRpcManager(2);
+        Rpc serverRpc = rpcManager.getRpc(0);
+        Rpc clientRpc = rpcManager.getRpc(1);
+        PsiServer<ByteBuffer> server = PsiFactory.createServer(serverRpc, clientRpc.ownParty(), config);
+        server.setTaskId(5);
+        return server;
+    }
+
+    public static PsiConfig buildPsiType(final String psiType) {
         switch (psiType) {
             case "HFH99_ECC_COMPRESS":
                 return new Hfh99EccPsiConfig.Builder().setCompressEncode(true).build();
@@ -140,22 +128,19 @@ public class PsiMain {
             case "KKRT16_NAIVE_4_HASH":
                 return new Kkrt16PsiConfig.Builder().setCuckooHashBinType(CuckooHashBinType.NAIVE_4_HASH).build();
             default:
-                throw new IllegalArgumentException("Invalid argument. PSI_TYPES valid: HFH99_ECC_COMPRESS, HFH99_ECC_UNCOMPRESS, KKRT16, KKRT16_NO_STASH_NAIVE, KKRT16_NAIVE_4_HASH");
+                throw new IllegalArgumentException("Argumento no válido. Tipos de PSI válidos: HFH99_ECC_COMPRESS, HFH99_ECC_UNCOMPRESS, KKRT16, KKRT16_NO_STASH_NAIVE, KKRT16_NAIVE_4_HASH");
         }
     }
 
     private static Set<ByteBuffer> convertByteArrayToByteBufferSet(final byte[] byteArray) {
         Set<ByteBuffer> byteBufferSet = new HashSet<>();
-        int blockSize = 32;
-
-        for (int i = 0; i < byteArray.length; i += blockSize) {
-            int endIndex = Math.min(i + blockSize, byteArray.length);
+        for (int i = 0; i < byteArray.length; i += BLOCK_SIZE) {
+            int endIndex = Math.min(i + BLOCK_SIZE, byteArray.length);
             byte[] blockBytes = new byte[endIndex - i];
             System.arraycopy(byteArray, i, blockBytes, 0, blockBytes.length);
             ByteBuffer byteBuffer = ByteBuffer.wrap(blockBytes);
             byteBufferSet.add(byteBuffer);
         }
-
         return byteBufferSet;
     }
 
@@ -170,7 +155,6 @@ public class PsiMain {
     }
 
     public static String bytesListToHexString(final List<byte[]> byteArrayList) {
-        String elementDelimiter = ":";
         StringBuilder hexString = new StringBuilder();
         for (int i = 0; i < byteArrayList.size(); i++) {
             byte[] byteArray = byteArrayList.get(i);
@@ -178,17 +162,16 @@ public class PsiMain {
                 hexString.append(String.format("%02X", b));
             }
             if (i < byteArrayList.size() - 1) {
-                hexString.append(elementDelimiter); // Agregar delimitador entre elementos
+                hexString.append(ELEMENT_DELIMITER); // Agregar delimitador entre elementos
             }
         }
         return hexString.toString();
     }
 
     public static List<byte[]> hexStringToBytesList(final String hexString) {
-        String elementDelimiter = ":";
         List<byte[]> byteArrayList = new ArrayList<>();
 
-        Iterable<String> elements = Splitter.onPattern(elementDelimiter).split(hexString);
+        Iterable<String> elements = Splitter.onPattern(ELEMENT_DELIMITER).split(hexString);
         for (String element : elements) {
             byte[] byteArray = new byte[element.length() / 2];
             for (int i = 0; i < element.length(); i += 2) {
@@ -215,4 +198,3 @@ public class PsiMain {
     }
 
 }
-

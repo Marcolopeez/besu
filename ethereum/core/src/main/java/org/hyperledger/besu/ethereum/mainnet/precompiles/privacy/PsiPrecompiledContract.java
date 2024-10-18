@@ -205,7 +205,6 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
                 privateWorldStateUpdater,
                 privacyGroupId,
                 messageFrame.getBlockValues().getNumber());
-        LOG.info("Processing private Transaction");
         return processPrivateTransaction(privateTransaction, disposablePrivateState, privacyGroupId, messageFrame, privateWorldStateUpdater);
     }
 
@@ -255,9 +254,8 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
 
             final Optional<Bytes> privateSet = getPrivateSetFromExtendedStorage(privateContractAddress);
             if (privateSet.isPresent()) {
-                final String[] psiMainArgs = new String[]{"HFH99_ECC_COMPRESS", "", privateSet.get().toHexString(), "", "", "", "", Integer.toString(bobSetLength), ""};
                 try {
-                    final String[] results = PsiMain.main(psiMainArgs);
+                    final String[] results = PsiMain.executeClient1("HFH99_ECC_COMPRESS", privateSet.get().toHexString(), bobSetLength);
 
                     putBetaInExtendedStorage(privateContractAddress, results[0]);
                     writeToFile("hyBeta.txt", results[1]);
@@ -299,9 +297,8 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
             final Optional<Bytes> privateSet = getPrivateSetFromExtendedStorage(privateContractAddress);
             if (privateSet.isPresent()) {
                 String hyBetaString = decodeHexString(aliceMetadata_CallResult.getOutput().toHexString());
-                final String[] psiMainArgs = new String[]{"HFH99_ECC_COMPRESS", privateSet.get().toHexString(), "", hyBetaString, "", "", "", "", Integer.toString(aliceSetLength)};
                 try {
-                    final String[] results = PsiMain.main(psiMainArgs);
+                    final String[] results = PsiMain.executeServer("HFH99_ECC_COMPRESS", privateSet.get().toHexString(), hyBetaString, aliceSetLength);
 
                     writeToFile("hxAlpha.txt", results[0]);
                     writeToFile("peqt.txt", results[1]);
@@ -347,9 +344,8 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
                     List<String> bobMetadataDecode = Splitter.on('|').splitToList(decodeHexString(bobMetadata_CallResult.getOutput().toHexString()));
                     String hxAlphaString = bobMetadataDecode.get(0);
                     String peqtString = bobMetadataDecode.get(1);
-                    final String[] psiMainArgs = new String[]{"HFH99_ECC_COMPRESS", "", privateSet.get().toHexString(), "", hxAlphaString, peqtString, betaString, Integer.toString(bobSetLength), ""};
                     try {
-                        final String[] results = PsiMain.main(psiMainArgs);
+                        final String[] results = PsiMain.executeClient2("HFH99_ECC_COMPRESS", privateSet.get().toHexString(), hxAlphaString, peqtString, betaString, bobSetLength);
 
                         LOG.info("Intersection: {}", results[0]);
                         return Bytes.wrap(results[0].getBytes(Charset.forName("UTF-8")));
