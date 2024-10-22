@@ -1,0 +1,14 @@
+plugins {
+  id 'java'
+}
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  //implementation files('/home/marco/mpc4j-1.0.4/mpc4j/mpc4j-s2pc-pso/target/mpc4j-s2pc-pso-1.0.4-jar-with-dependencies.jar')
+  implementation files('/home/marco/mpc4j-extracted/mpc4j-s2pc-pso-1.0.4-modified.jar')
+  testImplementation platform('org.junit:junit-bom:5.9.1')
+  testImplementation 'org.junit.jupiter:junit-jupiter'
+}
