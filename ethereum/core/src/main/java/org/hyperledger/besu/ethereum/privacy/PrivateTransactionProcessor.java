@@ -75,6 +75,16 @@ public class PrivateTransactionProcessor {
     this.privateTransactionValidator = privateTransactionValidator;
   }
 
+  public void processExtendedTransaction(final Bytes input, final PrivateTransaction transaction, final MessageFrame messageFrame){
+    try {
+      String precompiledAddress = "0x20"; //PsiPrecompiledContract Address
+      final AbstractMessageProcessor extendedPrivacyExecutor = messageCallProcessor;
+      extendedPrivacyExecutor.executeExtendedPrivacyPrecompiled(precompiledAddress, input, messageFrame);
+    } catch (final RuntimeException re) {
+      LOG.error("Critical Exception Processing Transaction", re);
+    }
+  }
+
   public TransactionProcessingResult processTransaction(
       final WorldUpdater publicWorldState,
       final WorldUpdater privateWorldState,

@@ -14,6 +14,7 @@
  */
 package org.hyperledger.besu.ethereum.mainnet;
 
+import org.hyperledger.besu.datatypes.Address;
 import static org.hyperledger.besu.ethereum.core.PrivacyParameters.DEFAULT_PRIVACY;
 import static org.hyperledger.besu.ethereum.core.PrivacyParameters.FLEXIBLE_PRIVACY;
 import static org.hyperledger.besu.ethereum.core.PrivacyParameters.PLUGIN_PRIVACY;
@@ -28,7 +29,9 @@ import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.FlexiblePrivacy
 import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.PrivacyPluginPrecompiledContract;
 import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.PrivacyPrecompiledContract;
 import org.hyperledger.besu.evm.precompile.PrecompileContractRegistry;
+import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.PsiPrecompiledContract;
 
+import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.PsiPrecompiledContract;
 /** Provides the various precompiled contracts used on mainnet hard forks. */
 public interface MainnetPrecompiledContractRegistries {
 
@@ -104,5 +107,16 @@ public interface MainnetPrecompiledContractRegistries {
               precompiledContractConfiguration.getPrivacyParameters(),
               "Privacy"));
     }
+  }
+
+  static void appendPsi(
+          final PrecompileContractRegistry registry,
+          final PrecompiledContractConfiguration precompiledContractConfiguration) {
+    registry.put(
+            Address.PSI,
+            new PsiPrecompiledContract(
+                    precompiledContractConfiguration.getGasCalculator(),
+                    precompiledContractConfiguration.getPrivacyParameters(),
+                    "Psi"));
   }
 }

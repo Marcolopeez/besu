@@ -174,4 +174,7 @@ public class ContractCreationProcessor extends AbstractMessageProcessor {
       }
     }
   }
+  @Override
+  public void executeExtendedPrivacyPrecompiled(final String precompiledAddress, final Bytes input, final MessageFrame messageFrame){
+  }
 }

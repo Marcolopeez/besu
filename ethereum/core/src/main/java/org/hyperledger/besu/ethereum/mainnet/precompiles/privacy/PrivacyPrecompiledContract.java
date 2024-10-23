@@ -20,6 +20,7 @@ import static org.hyperledger.besu.ethereum.mainnet.PrivateStateUtils.KEY_TRANSA
 import static org.hyperledger.besu.ethereum.privacy.PrivateStateRootResolver.EMPTY_ROOT_HASH;
 
 import org.hyperledger.besu.datatypes.Address;
+import org.hyperledger.besu.datatypes.Wei;
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.enclave.Enclave;
 import org.hyperledger.besu.enclave.EnclaveClientException;
@@ -51,6 +52,9 @@ import org.hyperledger.besu.evm.worldstate.WorldUpdater;
 
 import java.util.Base64;
 import java.util.Optional;
+import java.io.IOException;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
 import javax.annotation.Nonnull;
 
 import org.apache.tuweni.bytes.Bytes;
@@ -65,6 +69,7 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
   private final PrivateStateGenesisAllocator privateStateGenesisAllocator;
   final boolean alwaysIncrementPrivateNonce;
   PrivateTransactionProcessor privateTransactionProcessor;
+  private PrivateTransaction lastPrivateTransaction;
 
   private static final Logger LOG = LoggerFactory.getLogger(PrivacyPrecompiledContract.class);
 
@@ -100,6 +105,7 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
     this.privateStateRootResolver = privateStateRootResolver;
     this.privateStateGenesisAllocator = privateStateGenesisAllocator;
     this.alwaysIncrementPrivateNonce = alwaysIncrementPrivateNonce;
+    lastPrivateTransaction = new PrivateTransaction.Builder().build();
   }
 
   public void setPrivateTransactionProcessor(
@@ -182,6 +188,11 @@ public class PrivacyPrecompiledContract extends AbstractPrecompiledContract {
         privateWorldStateUpdater,
         privacyGroupId,
         messageFrame.getBlockValues().getNumber());
+
+    if (privateTransaction.hasExtendedPrivacy() && privateTransaction.getExtendedPrivacy().get().toHexString().equals("0x03") && !privateTransaction.equals(lastPrivateTransaction)) {
+      lastPrivateTransaction = privateTransaction;
+      privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
+    }
 
     final TransactionProcessingResult result =
         processPrivateTransaction(

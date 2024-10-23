@@ -24,6 +24,7 @@ import org.hyperledger.besu.evm.frame.MessageFrame;
 import org.hyperledger.besu.evm.precompile.PrecompileContractRegistry;
 import org.hyperledger.besu.evm.precompile.PrecompiledContract;
 import org.hyperledger.besu.evm.tracing.OperationTracer;
+import org.apache.tuweni.bytes.Bytes;
 
 import java.util.Collection;
 import java.util.Objects;
@@ -93,6 +94,24 @@ public class MessageCallProcessor extends AbstractMessageProcessor {
         frame.getRecipientAddress(),
         frame.getRemainingGas());
     frame.setState(MessageFrame.State.COMPLETED_SUCCESS);
+  }
+
+  @Override
+  public void executeExtendedPrivacyPrecompiled(final String precompiledAddress, final Bytes input, final MessageFrame messageFrame){
+    // Check first if the precompileAddress match
+    final PrecompiledContract precompile = precompiles.get(Address.fromHexString(precompiledAddress));
+    if (precompile != null) {
+      final PrecompiledContract.PrecompileContractResult result = precompile.computePrecompile(input, messageFrame);
+      if (result.getOutput() != Bytes.EMPTY) {
+        LOG.trace(
+                "Precompiled contract {}  successfully executed",
+                precompile.getName());
+      } else {
+        LOG.trace("Precompiled contract  {} failed", precompile);
+      }
+    } else {
+      LOG.trace("Precompiled contract  {} failed", precompile);
+    }
   }
 
   /**
