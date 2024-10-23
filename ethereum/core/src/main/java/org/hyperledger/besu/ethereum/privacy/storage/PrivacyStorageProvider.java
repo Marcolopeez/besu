@@ -30,6 +30,8 @@ public interface PrivacyStorageProvider extends Closeable {
 
   PrivateStateStorage createPrivateStateStorage();
 
+  ExtendedPrivacyStorage createExtendedPrivacyStorage();
+
   @Deprecated
   LegacyPrivateStateStorage createLegacyPrivateStateStorage();
 

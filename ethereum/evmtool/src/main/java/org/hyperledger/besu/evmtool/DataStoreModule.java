@@ -63,6 +63,13 @@ public class DataStoreModule {
 
   @Provides
   @Singleton
+  @Named("extendedPrivacy")
+  KeyValueStorage provideExtendedPrivacyKeyValueStorage() {
+    return new InMemoryKeyValueStorage();
+  }
+
+  @Provides
+  @Singleton
   @Named("variables")
   KeyValueStorage provideVariablesKeyValueStorage(
       @Named("KeyValueStorageName") final String keyValueStorageName,

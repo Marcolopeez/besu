@@ -24,6 +24,7 @@ import org.hyperledger.besu.enclave.EnclaveFactory;
 import org.hyperledger.besu.ethereum.privacy.PrivateStateGenesisAllocator;
 import org.hyperledger.besu.ethereum.privacy.PrivateStateRootResolver;
 import org.hyperledger.besu.ethereum.privacy.PrivateWorldStateReader;
+import org.hyperledger.besu.ethereum.privacy.storage.ExtendedPrivacyStorage;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivacyStorageProvider;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivateStateStorage;
 import org.hyperledger.besu.ethereum.trie.forest.ForestWorldStateArchive;
@@ -71,6 +72,7 @@ public class PrivacyParameters {
   private PrivacyStorageProvider privateStorageProvider;
   private WorldStateArchive privateWorldStateArchive;
   private PrivateStateStorage privateStateStorage;
+  private ExtendedPrivacyStorage extendedPrivacyStorage;
   private boolean multiTenancyEnabled;
   private boolean flexiblePrivacyGroupsEnabled;
   private boolean privacyPluginEnabled;
@@ -152,6 +154,13 @@ public class PrivacyParameters {
 
   private void setPrivateStateStorage(final PrivateStateStorage privateStateStorage) {
     this.privateStateStorage = privateStateStorage;
+  }
+
+  public ExtendedPrivacyStorage getExtendedPrivacyStorage() {
+    return extendedPrivacyStorage;
+  }
+  private void setExtendedPrivacyStorage(final ExtendedPrivacyStorage extendedPrivacyStorage){
+    this.extendedPrivacyStorage = extendedPrivacyStorage;
   }
 
   public Enclave getEnclave() {
@@ -360,10 +369,12 @@ public class PrivacyParameters {
             new ForestWorldStateArchive(
                 privateWorldStateStorage, privatePreimageStorage, EvmConfiguration.DEFAULT);
 
+        final ExtendedPrivacyStorage extendedPrivacyStorage = storageProvider.createExtendedPrivacyStorage();
         final PrivateStateStorage privateStateStorage = storageProvider.createPrivateStateStorage();
         final PrivateStateRootResolver privateStateRootResolver =
             new PrivateStateRootResolver(privateStateStorage);
 
+        config.setExtendedPrivacyStorage(extendedPrivacyStorage);
         config.setPrivateStateRootResolver(privateStateRootResolver);
         config.setPrivateWorldStateReader(
             new PrivateWorldStateReader(

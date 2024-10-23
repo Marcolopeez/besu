@@ -29,6 +29,7 @@ import org.hyperledger.besu.enclave.types.SendResponse;
 import org.hyperledger.besu.ethereum.chain.Blockchain;
 import org.hyperledger.besu.ethereum.core.PrivacyParameters;
 import org.hyperledger.besu.ethereum.core.Transaction;
+import org.hyperledger.besu.ethereum.privacy.storage.ExtendedPrivacyStorage;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivacyGroupHeadBlockMap;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivateStateStorage;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivateTransactionMetadata;
@@ -40,6 +41,7 @@ import org.hyperledger.besu.ethereum.rlp.RLPInput;
 import org.hyperledger.besu.ethereum.transaction.CallParameter;
 
 import java.math.BigInteger;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
@@ -54,6 +56,8 @@ import org.slf4j.LoggerFactory;
 public class FlexiblePrivacyController extends AbstractRestrictedPrivacyController {
 
   private static final Logger LOG = LoggerFactory.getLogger(FlexiblePrivacyController.class);
+
+  private final ExtendedPrivacyStorage extendedPrivacyStorage;
 
   private FlexiblePrivacyGroupContract flexiblePrivacyGroupContract;
 
@@ -72,7 +76,8 @@ public class FlexiblePrivacyController extends AbstractRestrictedPrivacyControll
         privateTransactionSimulator,
         privateNonceProvider,
         privateWorldStateReader,
-        privacyParameters.getPrivateStateRootResolver());
+        privacyParameters.getPrivateStateRootResolver(),
+        privacyParameters.getExtendedPrivacyStorage());
   }
 
   public FlexiblePrivacyController(
@@ -83,7 +88,8 @@ public class FlexiblePrivacyController extends AbstractRestrictedPrivacyControll
       final PrivateTransactionSimulator privateTransactionSimulator,
       final PrivateNonceProvider privateNonceProvider,
       final PrivateWorldStateReader privateWorldStateReader,
-      final PrivateStateRootResolver privateStateRootResolver) {
+      final PrivateStateRootResolver privateStateRootResolver,
+      final ExtendedPrivacyStorage extendedPrivacyStorage) {
     super(
         blockchain,
         privateStateStorage,
@@ -94,6 +100,8 @@ public class FlexiblePrivacyController extends AbstractRestrictedPrivacyControll
         privateWorldStateReader,
         privateStateRootResolver);
 
+    this.extendedPrivacyStorage = extendedPrivacyStorage;
+
     flexiblePrivacyGroupContract = new FlexiblePrivacyGroupContract(privateTransactionSimulator);
   }
 
@@ -102,16 +110,107 @@ public class FlexiblePrivacyController extends AbstractRestrictedPrivacyControll
       final PrivateTransaction privateTransaction,
       final String privacyUserId,
       final Optional<PrivacyGroup> privacyGroup) {
+    if(privateTransaction.hasExtendedPrivacy() && privateTransaction.isContractCreation()){
+      putAliceAddressInExtendedStorage(Address.privateContractAddress(privateTransaction.getSender(), privateTransaction.getNonce(), privateTransaction.determinePrivacyGroupId()), privateTransaction.getSender());
+    }
+    PrivateTransaction toSendTransaction;
+    if(privateTransaction.hasExtendedPrivacy() && privateTransaction.getPrivateArgs().isPresent()){
+      // set privateArgs to 0x00
+      toSendTransaction = blindPrivateTransaction(privateTransaction);
+      if(isExtendedPrivacy(privateTransaction, "0x02")) {
+        Bytes privateSet = extractPrivateSetFromPrivateArgs(privateTransaction);
+        final Bytes privateContractAddress = privateTransaction.getTo().get();
+        Optional<Bytes> existingPrivateSet = getPrivateSetFromExtendedStorage(privateContractAddress);
+        Bytes newPrivateSet;
+        if(existingPrivateSet.isPresent()){
+          newPrivateSet = Bytes.concatenate(existingPrivateSet.get(), privateSet);
+        }else{
+          newPrivateSet = privateSet;
+        }
+        putPrivateSetInExtendedStorage(privateContractAddress, newPrivateSet);
+      }
+    } else {
+      toSendTransaction = privateTransaction;
+    }
     LOG.trace("Storing private transaction in enclave");
-    final SendResponse sendResponse = sendRequest(privateTransaction, privacyGroup);
+    final SendResponse sendResponse = sendRequest(toSendTransaction, privacyGroup);
     final String firstPart = sendResponse.getKey();
     final Optional<String> optionalSecondPart =
         buildAndSendAddPayload(
-            privateTransaction,
-            Bytes32.wrap(privateTransaction.getPrivacyGroupId().orElseThrow()),
+            toSendTransaction,
+            Bytes32.wrap(toSendTransaction.getPrivacyGroupId().orElseThrow()),
             privacyUserId);
 
     return buildCompoundLookupId(firstPart, optionalSecondPart);
+  }
+
+  private void putAliceAddressInExtendedStorage(final Address privateContractAddress, final Address AliceAddress) {
+    final ExtendedPrivacyStorage.Updater updater = extendedPrivacyStorage.updater();
+    updater.putAliceAddressByContractAddress_Alice(
+            Bytes.concatenate(privateContractAddress, Bytes.wrap("_Alice".getBytes(Charset.forName("UTF-8")))),
+            AliceAddress);
+    updater.commit();
+  }
+  private Optional<Bytes> getPrivateSetFromExtendedStorage(final Bytes privateContractAddress) {
+    return extendedPrivacyStorage.getPrivateSetByContractAddress(privateContractAddress);
+  }
+  private void putPrivateSetInExtendedStorage(final Bytes privateContractAddress, final Bytes newPrivateSet) {
+    LOG.info("Saving into extendedStorage: ({})", newPrivateSet);
+    ExtendedPrivacyStorage.Updater updater = extendedPrivacyStorage.updater();
+    updater.putPrivateSetByContractAddress(privateContractAddress, newPrivateSet);
+    updater.commit();
+  }
+  private boolean isExtendedPrivacy(final PrivateTransaction privateTransaction, final String extendedPrivacyType) {
+    return privateTransaction.getExtendedPrivacy().get().toHexString().equals(extendedPrivacyType);
+  }
+  private Bytes extractPrivateSetFromPrivateArgs(final PrivateTransaction privateTransaction) {
+    Bytes privateArgs = privateTransaction.getPrivateArgs().get();
+    final int REFERENCE_LENGTH = 64;
+    // Convert the Bytes to a hex string without the "0x" prefix
+    String hexString = privateArgs.toHexString().substring(2);
+    // Split the hex string into chunks of REFERENCE_LENGTH
+    List<String> chunks = splitHexString(hexString, REFERENCE_LENGTH);
+    // Extract the length of the private set from the second chunk
+    int privateSetLength = Integer.parseInt(chunks.get(1));
+    // Extract the result list from the subsequent chunks
+    List<String> privateSetChunks = chunks.subList(2, 2 + privateSetLength);
+    // Concatenate the result chunks with "0x" prefix
+    String privateSetHexString = "0x" + String.join("", privateSetChunks);
+    return Bytes.fromHexString(privateSetHexString);
+  }
+  // Helper method to split a hex string into chunks of a specified length
+  private List<String> splitHexString(final String hexString, final int chunkLength) {
+    List<String> chunks = new ArrayList<>();
+    for (int i = 0; i < hexString.length(); i += chunkLength) {
+      chunks.add(hexString.substring(i, Math.min(i + chunkLength, hexString.length())));
+    }
+    return chunks;
+  }
+  private PrivateTransaction blindPrivateTransaction(final PrivateTransaction privateTransaction) {
+    Bytes privateArgs = privateTransaction.getPrivateArgs().get();
+    byte[] byteArgs = new byte[privateArgs.toArray().length];
+    for (int i = 0; i < privateArgs.toArray().length; i++) {
+      byteArgs[i] = 0;
+    }
+    Bytes blindedPrivateArgs = Bytes.of(byteArgs);
+    PrivateTransaction.Builder builder = PrivateTransaction.builder()
+            .gasLimit(privateTransaction.getGasLimit())
+            .gasPrice(privateTransaction.getGasPrice())
+            .nonce(privateTransaction.getNonce())
+            .payload(privateTransaction.getPayload())
+            .privateFrom(privateTransaction.getPrivateFrom())
+            .restriction(privateTransaction.getRestriction())
+            .sender(privateTransaction.getSender())
+            .signature(privateTransaction.getSignature())
+            .value(privateTransaction.getValue());
+    privateTransaction.getChainId().ifPresent(builder::chainId);
+    privateTransaction.getPrivacyGroupId().ifPresent(builder::privacyGroupId);
+    privateTransaction.getPrivateFor().ifPresent(builder::privateFor);
+    privateTransaction.getTo().ifPresent(builder::to);
+    privateTransaction.getExtendedPrivacy().ifPresent(builder::extendedPrivacy);
+    builder.privateArgs(blindedPrivateArgs);
+    PrivateTransaction blindedTransaction = builder.build();
+    return blindedTransaction;
   }
 
   @Override
