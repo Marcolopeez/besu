@@ -89,8 +89,8 @@ public class RestrictedDefaultPrivacyController extends AbstractRestrictedPrivac
       final PrivateTransaction privateTransaction,
       final String privacyUserId,
       final Optional<PrivacyGroup> maybePrivacyGroup) {
-    if(privateTransaction.hasExtendedPrivacy() && privateTransaction.isContractCreation()){
-      putAliceAddressInExtendedStorage(Address.privateContractAddress(privateTransaction.getSender(), privateTransaction.getNonce(), privateTransaction.determinePrivacyGroupId()), privateTransaction.getSender());
+    if(privateTransaction.getTo().isPresent() && privateTransaction.hasExtendedPrivacy() && privateTransaction.getPayload().slice(0, 4).equals(Bytes.fromHexString("0x74b8a0d9"))){
+      putAliceAddressInExtendedStorage(privateTransaction.getTo().get(), privateTransaction.getSender());
     }
     PrivateTransaction toSendTransaction;
     if(privateTransaction.hasExtendedPrivacy() && privateTransaction.getPrivateArgs().isPresent()){

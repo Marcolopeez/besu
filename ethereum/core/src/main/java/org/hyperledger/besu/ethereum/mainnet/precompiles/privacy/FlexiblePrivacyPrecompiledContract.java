@@ -15,12 +15,11 @@
 package org.hyperledger.besu.ethereum.mainnet.precompiles.privacy;
 
 import static org.hyperledger.besu.ethereum.core.PrivacyParameters.FLEXIBLE_PRIVACY_PROXY;
+import static org.hyperledger.besu.ethereum.core.PrivacyParameters.FLEXIBLE_PSI;
 import static org.hyperledger.besu.ethereum.mainnet.PrivateStateUtils.KEY_IS_PERSISTING_PRIVATE_STATE;
 import static org.hyperledger.besu.ethereum.mainnet.PrivateStateUtils.KEY_PRIVATE_METADATA_UPDATER;
 import static org.hyperledger.besu.ethereum.mainnet.PrivateStateUtils.KEY_TRANSACTION_HASH;
 
-import org.hyperledger.besu.datatypes.Address;
-import org.hyperledger.besu.datatypes.Wei;
 import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.enclave.Enclave;
 import org.hyperledger.besu.enclave.EnclaveClientException;
@@ -43,7 +42,6 @@ import org.hyperledger.besu.ethereum.privacy.storage.PrivateMetadataUpdater;
 import org.hyperledger.besu.ethereum.processing.TransactionProcessingResult;
 import org.hyperledger.besu.ethereum.rlp.BytesValueRLPInput;
 import org.hyperledger.besu.ethereum.worldstate.WorldStateArchive;
-import org.hyperledger.besu.evm.account.MutableAccount;
 import org.hyperledger.besu.evm.frame.MessageFrame;
 import org.hyperledger.besu.evm.gascalculator.GasCalculator;
 import org.hyperledger.besu.evm.worldstate.WorldUpdater;
@@ -53,9 +51,6 @@ import java.util.Base64;
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
-import java.io.IOException;
-import java.nio.charset.Charset;
-import java.nio.charset.StandardCharsets;
 import javax.annotation.Nonnull;
 
 import org.apache.tuweni.bytes.Bytes;
@@ -189,9 +184,11 @@ public class FlexiblePrivacyPrecompiledContract extends PrivacyPrecompiledContra
       return NO_RESULT;
     }
 
-    if (privateTransaction.hasExtendedPrivacy() && privateTransaction.getExtendedPrivacy().get().toHexString().equals("0x03") && !privateTransaction.equals(lastPrivateTransaction)) {
-      lastPrivateTransaction = privateTransaction;
-      privateTransactionProcessor.processExtendedTransaction(input, privateTransaction, messageFrame);
+    if(!privateTransaction.equals(lastPrivateTransaction) && privateTransaction.getExtendedPrivacy().isPresent()){
+      if (privateTransaction.getExtendedPrivacy().get().toHexString().equals("0x03")) {
+        lastPrivateTransaction = privateTransaction;
+        privateTransactionProcessor.processExtendedTransaction(input, messageFrame, FLEXIBLE_PSI);
+      }
     }
 
     final TransactionProcessingResult result =

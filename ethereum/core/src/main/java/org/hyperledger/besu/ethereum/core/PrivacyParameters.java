@@ -60,6 +60,10 @@ public class PrivacyParameters {
 
   public static final Address PLUGIN_PRIVACY = Address.precompiled(PRIVACY - 4);
 
+  // PSI precompiled addresses
+  public static final Address FLEXIBLE_PSI = Address.precompiled(PRIVACY - 5);
+  public static final Address PSI = Address.precompiled(PRIVACY - 6);
+
   public static final URI DEFAULT_ENCLAVE_URL = URI.create("http://localhost:8888");
   public static final PrivacyParameters DEFAULT = new PrivacyParameters();
 

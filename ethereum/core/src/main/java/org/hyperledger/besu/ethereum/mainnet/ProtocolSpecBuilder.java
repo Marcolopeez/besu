@@ -15,11 +15,7 @@
 package org.hyperledger.besu.ethereum.mainnet;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static org.hyperledger.besu.ethereum.core.PrivacyParameters.DEFAULT_PRIVACY;
-import static org.hyperledger.besu.ethereum.core.PrivacyParameters.FLEXIBLE_PRIVACY;
-import static org.hyperledger.besu.ethereum.core.PrivacyParameters.PLUGIN_PRIVACY;
 
-import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.datatypes.Wei;
 import org.hyperledger.besu.ethereum.BlockValidator;
 import org.hyperledger.besu.ethereum.GasLimitCalculator;
@@ -27,12 +23,18 @@ import org.hyperledger.besu.ethereum.chain.BadBlockManager;
 import org.hyperledger.besu.ethereum.core.BlockHeaderFunctions;
 import org.hyperledger.besu.ethereum.core.BlockImporter;
 import org.hyperledger.besu.ethereum.core.PrivacyParameters;
+import static org.hyperledger.besu.ethereum.core.PrivacyParameters.FLEXIBLE_PRIVACY;
+import static org.hyperledger.besu.ethereum.core.PrivacyParameters.FLEXIBLE_PSI;
+import static org.hyperledger.besu.ethereum.core.PrivacyParameters.DEFAULT_PRIVACY;
+import static org.hyperledger.besu.ethereum.core.PrivacyParameters.PLUGIN_PRIVACY;
+import static org.hyperledger.besu.ethereum.core.PrivacyParameters.PSI;
 import org.hyperledger.besu.ethereum.mainnet.blockhash.BlockHashProcessor;
 import org.hyperledger.besu.ethereum.mainnet.feemarket.FeeMarket;
 import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.FlexiblePrivacyPrecompiledContract;
 import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.PrivacyPluginPrecompiledContract;
 import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.PrivacyPrecompiledContract;
 import org.hyperledger.besu.ethereum.mainnet.requests.RequestProcessorCoordinator;
+import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.FlexiblePsiPrecompiledContract;
 import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.PsiPrecompiledContract;
 import org.hyperledger.besu.ethereum.mainnet.requests.RequestsValidatorCoordinator;
 import org.hyperledger.besu.ethereum.privacy.PrivateTransactionProcessor;
@@ -176,8 +178,6 @@ public class ProtocolSpecBuilder {
             MainnetPrecompiledContractRegistries.appendPrivacy(
                 registry, precompiledContractConfiguration);
           }
-          MainnetPrecompiledContractRegistries.appendPsi(
-                  registry, precompiledContractConfiguration);
           return registry;
         };
     return this;
@@ -440,16 +440,16 @@ public class ProtocolSpecBuilder {
         flexiblePrivacyPrecompiledContract.setPrivateTransactionProcessor(
             privateTransactionProcessor);
 
-        final PsiPrecompiledContract psiPrecompiledContract =
-                (PsiPrecompiledContract) precompileContractRegistry.get(Address.PSI);
-        psiPrecompiledContract.setPrivateTransactionProcessor(privateTransactionProcessor);
+        final FlexiblePsiPrecompiledContract flexiblePsiPrecompiledContract =
+                (FlexiblePsiPrecompiledContract) precompileContractRegistry.get(FLEXIBLE_PSI);
+        flexiblePsiPrecompiledContract.setPrivateTransactionProcessor(privateTransactionProcessor);
       } else {
         final PrivacyPrecompiledContract privacyPrecompiledContract =
             (PrivacyPrecompiledContract) precompileContractRegistry.get(DEFAULT_PRIVACY);
         privacyPrecompiledContract.setPrivateTransactionProcessor(privateTransactionProcessor);
 
         final PsiPrecompiledContract psiPrecompiledContract =
-                (PsiPrecompiledContract) precompileContractRegistry.get(Address.PSI);
+                (PsiPrecompiledContract) precompileContractRegistry.get(PSI);
         psiPrecompiledContract.setPrivateTransactionProcessor(privateTransactionProcessor);
       }
     }

@@ -18,6 +18,8 @@ import org.hyperledger.besu.datatypes.Address;
 import static org.hyperledger.besu.ethereum.core.PrivacyParameters.DEFAULT_PRIVACY;
 import static org.hyperledger.besu.ethereum.core.PrivacyParameters.FLEXIBLE_PRIVACY;
 import static org.hyperledger.besu.ethereum.core.PrivacyParameters.PLUGIN_PRIVACY;
+import static org.hyperledger.besu.ethereum.core.PrivacyParameters.FLEXIBLE_PSI;
+import static org.hyperledger.besu.ethereum.core.PrivacyParameters.PSI;
 import static org.hyperledger.besu.evm.precompile.MainnetPrecompiledContracts.populateForByzantium;
 import static org.hyperledger.besu.evm.precompile.MainnetPrecompiledContracts.populateForCancun;
 import static org.hyperledger.besu.evm.precompile.MainnetPrecompiledContracts.populateForFrontier;
@@ -29,9 +31,9 @@ import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.FlexiblePrivacy
 import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.PrivacyPluginPrecompiledContract;
 import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.PrivacyPrecompiledContract;
 import org.hyperledger.besu.evm.precompile.PrecompileContractRegistry;
+import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.FlexiblePsiPrecompiledContract;
 import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.PsiPrecompiledContract;
 
-import org.hyperledger.besu.ethereum.mainnet.precompiles.privacy.PsiPrecompiledContract;
 /** Provides the various precompiled contracts used on mainnet hard forks. */
 public interface MainnetPrecompiledContractRegistries {
 
@@ -99,6 +101,12 @@ public interface MainnetPrecompiledContractRegistries {
           new FlexiblePrivacyPrecompiledContract(
               precompiledContractConfiguration.getGasCalculator(),
               precompiledContractConfiguration.getPrivacyParameters()));
+      registry.put(
+          FLEXIBLE_PSI,
+          new FlexiblePsiPrecompiledContract(
+              precompiledContractConfiguration.getGasCalculator(),
+              precompiledContractConfiguration.getPrivacyParameters(),
+              "Flexible_Psi"));
     } else {
       registry.put(
           DEFAULT_PRIVACY,
@@ -106,17 +114,12 @@ public interface MainnetPrecompiledContractRegistries {
               precompiledContractConfiguration.getGasCalculator(),
               precompiledContractConfiguration.getPrivacyParameters(),
               "Privacy"));
+      registry.put(
+          PSI,
+          new PsiPrecompiledContract(
+                  precompiledContractConfiguration.getGasCalculator(),
+                  precompiledContractConfiguration.getPrivacyParameters(),
+                  "Psi"));
     }
-  }
-
-  static void appendPsi(
-          final PrecompileContractRegistry registry,
-          final PrecompiledContractConfiguration precompiledContractConfiguration) {
-    registry.put(
-            Address.PSI,
-            new PsiPrecompiledContract(
-                    precompiledContractConfiguration.getGasCalculator(),
-                    precompiledContractConfiguration.getPrivacyParameters(),
-                    "Psi"));
   }
 }

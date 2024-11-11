@@ -20,12 +20,12 @@ import org.hyperledger.besu.ethereum.core.PrivacyParameters;
 import org.hyperledger.besu.ethereum.core.ProcessableBlockHeader;
 import static org.hyperledger.besu.ethereum.mainnet.PrivateStateUtils.KEY_IS_PERSISTING_PRIVATE_STATE;
 import static org.hyperledger.besu.ethereum.mainnet.PrivateStateUtils.KEY_PRIVATE_METADATA_UPDATER;
-import static org.hyperledger.besu.ethereum.mainnet.PrivateStateUtils.KEY_TRANSACTION_HASH;
 import static org.hyperledger.besu.ethereum.privacy.PrivateStateRootResolver.EMPTY_ROOT_HASH;
 import org.hyperledger.besu.ethereum.privacy.PrivateStateGenesisAllocator;
 import org.hyperledger.besu.ethereum.privacy.PrivateStateRootResolver;
 import org.hyperledger.besu.ethereum.privacy.PrivateTransaction;
 import org.hyperledger.besu.ethereum.privacy.PrivateTransactionProcessor;
+import org.hyperledger.besu.ethereum.privacy.VersionedPrivateTransaction;
 import org.hyperledger.besu.ethereum.privacy.storage.ExtendedPrivacyStorage;
 import org.hyperledger.besu.ethereum.privacy.storage.PrivateMetadataUpdater;
 import org.hyperledger.besu.ethereum.processing.TransactionProcessingResult;
@@ -58,7 +58,7 @@ import org.hyperledger.besu.psi.PsiMain;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class PsiPrecompiledContract extends AbstractPrecompiledContract{
+public class FlexiblePsiPrecompiledContract extends AbstractPrecompiledContract{
     private final Enclave enclave;
     final WorldStateArchive privateWorldStateArchive;
     final PrivateStateRootResolver privateStateRootResolver;
@@ -66,7 +66,6 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
     final boolean alwaysIncrementPrivateNonce;
     PrivateTransactionProcessor privateTransactionProcessor;
     private final ExtendedPrivacyStorage extendedPrivacyStorage;
-
     private static final String ALICE_METADATA_SIGNATURE = "0xd8e32925";
     private static final String BOB_METADATA_SIGNATURE = "0xa676cc06";
     private static final String ALICE_COMPLETED_SET_LOADING_SIGNATURE = "0xe461725a";
@@ -74,7 +73,6 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
     private static final String CONSUME_SIGNATURE = "0x1dedc6f7";
     private static final String ALICE_SET_LENGTH_SIGNATURE = "0xe6491f90";
     private static final String BOB_SET_LENGTH_SIGNATURE = "0x23c1455c";
-
     private static final Supplier<SignatureAlgorithm> SIGNATURE_ALGORITHM =
             Suppliers.memoize(SignatureAlgorithmFactory::getInstance);
     // Dummy signature for transactions to not fail being processed.
@@ -85,14 +83,11 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
                             SIGNATURE_ALGORITHM.get().getHalfCurveOrder(),
                             SIGNATURE_ALGORITHM.get().getHalfCurveOrder(),
                             (byte) 0);
-
-    private static final Logger LOG = LoggerFactory.getLogger(PsiPrecompiledContract.class);
-
+    private static final Logger LOG = LoggerFactory.getLogger(FlexiblePsiPrecompiledContract.class);
     static final PrecompileContractResult NO_RESULT =
             new PrecompileContractResult(
                     Bytes.EMPTY, true, MessageFrame.State.CODE_EXECUTING, Optional.empty());
-
-    public PsiPrecompiledContract(
+    public FlexiblePsiPrecompiledContract(
             final GasCalculator gasCalculator,
             final PrivacyParameters privacyParameters,
             final String name) {
@@ -106,8 +101,7 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
                 name,
                 privacyParameters.getExtendedPrivacyStorage());
     }
-
-    protected PsiPrecompiledContract(
+    protected FlexiblePsiPrecompiledContract(
             final GasCalculator gasCalculator,
             final Enclave enclave,
             final WorldStateArchive worldStateArchive,
@@ -124,28 +118,25 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
         this.alwaysIncrementPrivateNonce = alwaysIncrementPrivateNonce;
         this.extendedPrivacyStorage = extendedPrivacyStorage;
     }
-
     public void setPrivateTransactionProcessor(
             final PrivateTransactionProcessor privateTransactionProcessor) {
         this.privateTransactionProcessor = privateTransactionProcessor;
     }
-
     @Override
     public long gasRequirement(final Bytes input) {
         return 0L;
     }
-
     @Nonnull
     @Override
     public PrecompileContractResult computePrecompile(final Bytes input, @Nonnull final MessageFrame messageFrame) {
-
         if (skipContractExecution(messageFrame)) {
             return NO_RESULT;
         }
-
-        final Hash pmtHash = messageFrame.getContextVariable(KEY_TRANSACTION_HASH);
-
-        final String key = input.toBase64String();
+        if (input == null || (input.size() != 32 && input.size() != 64)) {
+            LOG.error("Can not fetch private transaction payload with key of invalid length {}", input);
+            return NO_RESULT;
+        }
+        final String key = input.slice(0, 32).toBase64String();
         final ReceiveResponse receiveResponse;
         try {
             receiveResponse = getReceiveResponse(key);
@@ -153,58 +144,35 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
             LOG.debug("Can not fetch private transaction payload with key {}", key, e);
             return NO_RESULT;
         }
-
         final BytesValueRLPInput bytesValueRLPInput =
                 new BytesValueRLPInput(
                         Bytes.wrap(Base64.getDecoder().decode(receiveResponse.getPayload())), false);
+        final VersionedPrivateTransaction versionedPrivateTransaction =
+                VersionedPrivateTransaction.readFrom(bytesValueRLPInput);
         final PrivateTransaction privateTransaction =
-                PrivateTransaction.readFrom(bytesValueRLPInput.readAsRlp());
-
+                versionedPrivateTransaction.getPrivateTransaction();
         final Bytes privateFrom = privateTransaction.getPrivateFrom();
         if (!privateFromMatchesSenderKey(privateFrom, receiveResponse.getSenderKey())) {
             return NO_RESULT;
         }
-
-        final Bytes32 privacyGroupId =
-                Bytes32.wrap(Bytes.fromBase64String(receiveResponse.getPrivacyGroupId()));
-
-        try {
-            if (privateTransaction.getPrivateFor().isEmpty()
-                    && !enclave
-                    .retrievePrivacyGroup(privacyGroupId.toBase64String())
-                    .getMembers()
-                    .contains(privateFrom.toBase64String())) {
-                return NO_RESULT;
-            }
-        } catch (final EnclaveClientException e) {
-            // This exception is thrown when the privacy group can not be found
+        final Optional<Bytes> maybeGroupId = privateTransaction.getPrivacyGroupId();
+        if (maybeGroupId.isEmpty()) {
             return NO_RESULT;
-        } catch (final EnclaveServerException e) {
-            throw new IllegalStateException(
-                    "Enclave is responding with an error, perhaps it has a misconfiguration?", e);
-        } catch (final EnclaveIOException e) {
-            throw new IllegalStateException("Can not communicate with enclave, is it up?", e);
         }
-
-        LOG.debug("Processing private transaction {} in privacy group {}", pmtHash, privacyGroupId);
-
+        final Bytes32 privacyGroupId = Bytes32.wrap(maybeGroupId.get());
         final PrivateMetadataUpdater privateMetadataUpdater =
                 messageFrame.getContextVariable(KEY_PRIVATE_METADATA_UPDATER);
         final Hash lastRootHash =
                 privateStateRootResolver.resolveLastStateRoot(privacyGroupId, privateMetadataUpdater);
-
         final MutableWorldState disposablePrivateState =
                 privateWorldStateArchive.getMutable(lastRootHash, null).get();
-
         final WorldUpdater privateWorldStateUpdater = disposablePrivateState.updater();
-
         maybeApplyGenesisToPrivateWorldState(
                 lastRootHash,
                 disposablePrivateState,
                 privateWorldStateUpdater,
                 privacyGroupId,
                 messageFrame.getBlockValues().getNumber());
-
         return processPrivateTransaction(privateTransaction, disposablePrivateState, privacyGroupId, messageFrame, privateWorldStateUpdater);
     }
     private PrecompileContractResult processPrivateTransaction(
@@ -227,6 +195,7 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
                 }
             }
         }
+
         return NO_RESULT;
     }
     private PrecompileContractResult handleAliceSetIsReady(
@@ -507,15 +476,16 @@ public class PsiPrecompiledContract extends AbstractPrecompiledContract{
                         .payload(Bytes.fromHexString(methodSignature))
                         .signature(FAKE_SIGNATURE)
                         .build();
+
         return privateTransactionProcessor.processTransaction(
-                        messageFrame.getWorldUpdater(),
-                        privateWorldStateUpdater,
-                        (ProcessableBlockHeader) messageFrame.getBlockValues(),
-                        Hash.ZERO, // Corresponding PMT hash not needed as this private transaction doesn't exist
-                        callTransaction,
-                        messageFrame.getMiningBeneficiary(),
-                        OperationTracer.NO_TRACING,
-                        messageFrame.getBlockHashLookup(),
-                        privacyGroupId);
+                messageFrame.getWorldUpdater(),
+                privateWorldStateUpdater,
+                (ProcessableBlockHeader) messageFrame.getBlockValues(),
+                Hash.ZERO, // Corresponding PMT hash not needed as this private transaction doesn't exist
+                callTransaction,
+                messageFrame.getMiningBeneficiary(),
+                OperationTracer.NO_TRACING,
+                messageFrame.getBlockHashLookup(),
+                privacyGroupId);
     }
 }
