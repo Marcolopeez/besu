@@ -8,6 +8,7 @@ public interface ExtendedPrivacyStorage {
   Optional<Bytes> getPrivateSetByContractAddress(Bytes contractAddress);
   Optional<Bytes> getBetaByContractAddress_Beta(Bytes contractAddress_Beta);
   Optional<Bytes> getAliceAddressByContractAddress_Alice(Bytes contractAddress_Alice);
+  Optional<Bytes> getBobAddressByContractAddress_Bob(Bytes contractAddress_Bob);
 
   Updater updater();
 
@@ -21,6 +22,9 @@ public interface ExtendedPrivacyStorage {
 
     Updater putAliceAddressByContractAddress_Alice(
             Bytes contractAddress_Alice, Bytes aliceAddress);
+
+    Updater putBobAddressByContractAddress_Bob(
+            Bytes contractAddress_Bob, Bytes bobAddress);
 
     void commit();
 

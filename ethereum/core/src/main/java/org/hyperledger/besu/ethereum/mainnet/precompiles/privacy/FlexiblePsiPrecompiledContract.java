@@ -66,13 +66,19 @@ public class FlexiblePsiPrecompiledContract extends AbstractPrecompiledContract{
     final boolean alwaysIncrementPrivateNonce;
     PrivateTransactionProcessor privateTransactionProcessor;
     private final ExtendedPrivacyStorage extendedPrivacyStorage;
+
     private static final String ALICE_METADATA_SIGNATURE = "0xd8e32925";
     private static final String BOB_METADATA_SIGNATURE = "0xa676cc06";
-    private static final String ALICE_COMPLETED_SET_LOADING_SIGNATURE = "0xe461725a";
-    private static final String BOB_COMPLETED_SET_LOADING_SIGNATURE = "0xfc04cda7";
-    private static final String CONSUME_SIGNATURE = "0x1dedc6f7";
+    private static final String ALICE_COMPLETE_SET_LOADING_ONE_WAY_SIGNATURE = "0xbbb534b1";
+    private static final String ALICE_COMPLETE_SET_LOADING_TWO_WAY_SIGNATURE = "0x13498db9";
+    private static final String BOB_COMPLETE_SET_LOADING_ONE_WAY_SIGNATURE = "0x8225a7ed";
+    private static final String BOB_COMPLETE_SET_LOADING_TWO_WAY_SIGNATURE = "0x8a841711";
+    private static final String CONSUME_ALICE_ONE_WAY_SIGNATURE = "0x3edb6f96";
+    private static final String CONSUME_ALICE_TWO_WAY_SIGNATURE = "0xd44c1853";
+    private static final String CONSUME_BOB_TWO_WAY_SIGNATURE = "0x40cce237";
     private static final String ALICE_SET_LENGTH_SIGNATURE = "0xe6491f90";
     private static final String BOB_SET_LENGTH_SIGNATURE = "0x23c1455c";
+
     private static final Supplier<SignatureAlgorithm> SIGNATURE_ALGORITHM =
             Suppliers.memoize(SignatureAlgorithmFactory::getInstance);
     // Dummy signature for transactions to not fail being processed.
@@ -83,10 +89,13 @@ public class FlexiblePsiPrecompiledContract extends AbstractPrecompiledContract{
                             SIGNATURE_ALGORITHM.get().getHalfCurveOrder(),
                             SIGNATURE_ALGORITHM.get().getHalfCurveOrder(),
                             (byte) 0);
+
     private static final Logger LOG = LoggerFactory.getLogger(FlexiblePsiPrecompiledContract.class);
+
     static final PrecompileContractResult NO_RESULT =
             new PrecompileContractResult(
                     Bytes.EMPTY, true, MessageFrame.State.CODE_EXECUTING, Optional.empty());
+
     public FlexiblePsiPrecompiledContract(
             final GasCalculator gasCalculator,
             final PrivacyParameters privacyParameters,
@@ -101,6 +110,7 @@ public class FlexiblePsiPrecompiledContract extends AbstractPrecompiledContract{
                 name,
                 privacyParameters.getExtendedPrivacyStorage());
     }
+
     protected FlexiblePsiPrecompiledContract(
             final GasCalculator gasCalculator,
             final Enclave enclave,
@@ -118,10 +128,12 @@ public class FlexiblePsiPrecompiledContract extends AbstractPrecompiledContract{
         this.alwaysIncrementPrivateNonce = alwaysIncrementPrivateNonce;
         this.extendedPrivacyStorage = extendedPrivacyStorage;
     }
+
     public void setPrivateTransactionProcessor(
             final PrivateTransactionProcessor privateTransactionProcessor) {
         this.privateTransactionProcessor = privateTransactionProcessor;
     }
+
     @Override
     public long gasRequirement(final Bytes input) {
         return 0L;
@@ -175,6 +187,7 @@ public class FlexiblePsiPrecompiledContract extends AbstractPrecompiledContract{
                 messageFrame.getBlockValues().getNumber());
         return processPrivateTransaction(privateTransaction, disposablePrivateState, privacyGroupId, messageFrame, privateWorldStateUpdater);
     }
+
     private PrecompileContractResult processPrivateTransaction(
             final PrivateTransaction privateTransaction,
             final MutableWorldState disposablePrivateState,
@@ -185,20 +198,28 @@ public class FlexiblePsiPrecompiledContract extends AbstractPrecompiledContract{
             if (privateTransaction.getExtendedPrivacy().get().toHexString().equals("0x03")) {
                 final Address privateContractAddress = privateTransaction.getTo().get();
                 final Optional<Bytes> aliceAddress = getAliceAddressFromExtendedStorage(privateContractAddress);
+                final Optional<Bytes> bobAddress = getBobAddressFromExtendedStorage(privateContractAddress);
                 final Bytes methodCalled = privateTransaction.getPayload().slice(0, 4);
-                if (isAliceSetIsReadyMethod(methodCalled) && aliceAddress.isPresent()) {
-                    return handleAliceSetIsReady(privateTransaction, disposablePrivateState, privacyGroupId, messageFrame, privateWorldStateUpdater, privateContractAddress);
-                } else if (isBobSetIsReadyMethod(methodCalled) && aliceAddress.isEmpty()) {
-                    return handleBobSetIsReady(privateTransaction, disposablePrivateState, privacyGroupId, messageFrame, privateWorldStateUpdater, privateContractAddress);
-                } else if (isConsumeMethod(methodCalled) && aliceAddress.isPresent()) {
-                    return handleConsume(privateTransaction, disposablePrivateState, privacyGroupId, messageFrame, privateWorldStateUpdater, privateContractAddress);
+                if ((isAliceCompleteSetLoading_OneWayMethod(methodCalled) || isAliceCompleteSetLoading_TwoWayMethod(methodCalled)) && aliceAddress.isPresent()) {
+                    return handleAliceCompleteSetLoading(privateTransaction, disposablePrivateState, privacyGroupId, messageFrame, privateWorldStateUpdater, privateContractAddress);
+                } else if (isBobCompleteSetLoading_OneWayMethod(methodCalled) && aliceAddress.isEmpty()) {
+                    return handleBobCompleteSetLoading_OneWay(privateTransaction, disposablePrivateState, privacyGroupId, messageFrame, privateWorldStateUpdater, privateContractAddress);
+                } else if (isBobCompleteSetLoading_TwoWayMethod(methodCalled) && bobAddress.isPresent()) {
+                    return handleBobCompleteSetLoading_TwoWay(privateTransaction, disposablePrivateState, privacyGroupId, messageFrame, privateWorldStateUpdater, privateContractAddress);
+                } else if (isConsumeAlice_OneWayMethod(methodCalled) && aliceAddress.isPresent()) {
+                    return handleConsumeAlice_OneWay(privateTransaction, disposablePrivateState, privacyGroupId, messageFrame, privateWorldStateUpdater, privateContractAddress);
+                } else if (isConsumeAlice_TwoWayMethod(methodCalled) && aliceAddress.isPresent()) {
+                    return handleConsumeAlice_TwoWay(privateTransaction, disposablePrivateState, privacyGroupId, messageFrame, privateWorldStateUpdater, privateContractAddress);
+                } else if (isConsumeBob_TwoWayMethod(methodCalled) && bobAddress.isPresent()) {
+                    return handleConsumeBob_TwoWay(privateTransaction, disposablePrivateState, privacyGroupId, messageFrame, privateWorldStateUpdater, privateContractAddress);
                 }
             }
         }
 
         return NO_RESULT;
     }
-    private PrecompileContractResult handleAliceSetIsReady(
+
+    private PrecompileContractResult handleAliceCompleteSetLoading(
             final PrivateTransaction privateTransaction,
             final MutableWorldState disposablePrivateState,
             final Bytes32 privacyGroupId,
@@ -217,12 +238,12 @@ public class FlexiblePsiPrecompiledContract extends AbstractPrecompiledContract{
             final Optional<Bytes> privateSet = getPrivateSetFromExtendedStorage(privateContractAddress);
             if (privateSet.isPresent()) {
                 try {
-                    final String[] results = PsiMain.executeClient1("HFH99_ECC_COMPRESS", privateSet.get().toHexString(), bobSetLength);
+                    final String[] executeClientResults = PsiMain.executeClient1("HFH99_ECC_COMPRESS", privateSet.get().toHexString(), bobSetLength);
 
-                    putBetaInExtendedStorage(privateContractAddress, results[0]);
-                    writeToFile("files/hyBeta.txt", results[1]);
+                    putBetaInExtendedStorage(privateContractAddress, executeClientResults[0]);
+                    writeToFile("files/hyBeta_Alice.txt", executeClientResults[1]);
 
-                    String concatenatedResult = results[0] + "|" + results[1];
+                    String concatenatedResult = executeClientResults[0] + "|" + executeClientResults[1];
                     Bytes result = Bytes.wrap(concatenatedResult.getBytes(StandardCharsets.UTF_8));
                     return new PrecompileContractResult(
                             result, true, MessageFrame.State.CODE_SUCCESS, Optional.empty());
@@ -234,7 +255,8 @@ public class FlexiblePsiPrecompiledContract extends AbstractPrecompiledContract{
         }
         return NO_RESULT;
     }
-    private PrecompileContractResult handleBobSetIsReady(
+
+    private PrecompileContractResult handleBobCompleteSetLoading_OneWay(
             final PrivateTransaction privateTransaction,
             final MutableWorldState disposablePrivateState,
             final Bytes32 privacyGroupId,
@@ -257,14 +279,14 @@ public class FlexiblePsiPrecompiledContract extends AbstractPrecompiledContract{
 
             final Optional<Bytes> privateSet = getPrivateSetFromExtendedStorage(privateContractAddress);
             if (privateSet.isPresent()) {
-                String hyBetaString = decodeHexString(aliceMetadata_CallResult.getOutput().toHexString());
+                String hyBeta_AliceString = decodeHexString(aliceMetadata_CallResult.getOutput().toHexString());
                 try {
-                    final String[] results = PsiMain.executeServer("HFH99_ECC_COMPRESS", privateSet.get().toHexString(), hyBetaString, aliceSetLength);
+                    final String[] executeServerResults = PsiMain.executeServer("HFH99_ECC_COMPRESS", privateSet.get().toHexString(), hyBeta_AliceString, aliceSetLength);
 
-                    writeToFile("files/hxAlpha.txt", results[0]);
-                    writeToFile("files/peqt.txt", results[1]);
+                    writeToFile("files/hxAlpha_Bob.txt", executeServerResults[0]);
+                    writeToFile("files/peqt_Bob.txt", executeServerResults[1]);
 
-                    String concatenatedResult = results[0] + "|" + results[1];
+                    String concatenatedResult = executeServerResults[0] + "|" + executeServerResults[1];
                     Bytes result = Bytes.wrap(concatenatedResult.getBytes(StandardCharsets.UTF_8));
                     return new PrecompileContractResult(
                             result, true, MessageFrame.State.CODE_SUCCESS, Optional.empty());
@@ -276,17 +298,64 @@ public class FlexiblePsiPrecompiledContract extends AbstractPrecompiledContract{
         }
         return NO_RESULT;
     }
-    private PrecompileContractResult handleConsume(
+
+    private PrecompileContractResult handleBobCompleteSetLoading_TwoWay(
             final PrivateTransaction privateTransaction,
             final MutableWorldState disposablePrivateState,
             final Bytes32 privacyGroupId,
             final MessageFrame messageFrame,
             final WorldUpdater privateWorldStateUpdater,
             final Address privateContractAddress) {
-        Optional<Bytes> beta = getBetaFromExtendedStorage(privateContractAddress);
-        if (beta.isPresent()) {
-            byte[] byteArray = beta.get().toArray();
-            String betaString = new String(byteArray, StandardCharsets.UTF_8);
+        final TransactionProcessingResult aliceSetLength_CallResult =
+                transactionCall(privateTransaction, disposablePrivateState, privacyGroupId,
+                        privateTransactionProcessor, messageFrame,
+                        privateWorldStateUpdater, privateContractAddress,
+                        ALICE_SET_LENGTH_SIGNATURE);
+        final TransactionProcessingResult aliceMetadata_CallResult =
+                transactionCall(privateTransaction, disposablePrivateState, privacyGroupId,
+                        privateTransactionProcessor, messageFrame,
+                        privateWorldStateUpdater, privateContractAddress,
+                        ALICE_METADATA_SIGNATURE);
+
+        if (aliceSetLength_CallResult.isSuccessful() && aliceMetadata_CallResult.isSuccessful()) {
+            final int aliceSetLength = getSetLength(aliceSetLength_CallResult);
+
+            final Optional<Bytes> privateSet = getPrivateSetFromExtendedStorage(privateContractAddress);
+            if (privateSet.isPresent()) {
+                String hyBeta_AliceString = decodeHexString(aliceMetadata_CallResult.getOutput().toHexString());
+                try {
+                    final String[] executeClientResults = PsiMain.executeClient1("HFH99_ECC_COMPRESS", privateSet.get().toHexString(), aliceSetLength);
+                    final String[] executeServerResults = PsiMain.executeServer("HFH99_ECC_COMPRESS", privateSet.get().toHexString(), hyBeta_AliceString, aliceSetLength);
+
+                    putBetaInExtendedStorage(privateContractAddress, executeClientResults[0]);
+                    writeToFile("files/hyBeta_Bob.txt", executeClientResults[1]);
+                    writeToFile("files/hxAlpha_Bob.txt", executeServerResults[0]);
+                    writeToFile("files/peqt_Bob.txt", executeServerResults[1]);
+
+                    String concatenatedResult = executeClientResults[1] + "|" + executeServerResults[0] + "|" + executeServerResults[1];
+                    Bytes result = Bytes.wrap(concatenatedResult.getBytes(StandardCharsets.UTF_8));
+                    return new PrecompileContractResult(
+                            result, true, MessageFrame.State.CODE_SUCCESS, Optional.empty());
+                } catch (Exception e) {
+                    LOG.error("Error processing PSI: {}", e.getMessage(), e);
+                    return NO_RESULT;
+                }
+            }
+        }
+        return NO_RESULT;
+    }
+
+    private PrecompileContractResult handleConsumeAlice_OneWay(
+            final PrivateTransaction privateTransaction,
+            final MutableWorldState disposablePrivateState,
+            final Bytes32 privacyGroupId,
+            final MessageFrame messageFrame,
+            final WorldUpdater privateWorldStateUpdater,
+            final Address privateContractAddress) {
+        Optional<Bytes> beta_Alice = getBetaFromExtendedStorage(privateContractAddress);
+        if (beta_Alice.isPresent()) {
+            byte[] byteArray = beta_Alice.get().toArray();
+            String beta_AliceString = new String(byteArray, StandardCharsets.UTF_8);
             final Optional<Bytes> privateSet = getPrivateSetFromExtendedStorage(privateContractAddress);
             if (privateSet.isPresent()) {
                 final TransactionProcessingResult bobMetadata_CallResult =
@@ -303,13 +372,108 @@ public class FlexiblePsiPrecompiledContract extends AbstractPrecompiledContract{
                 if(bobMetadata_CallResult.isSuccessful() && bobSetLength_CallResult.isSuccessful()){
                     final int bobSetLength = getSetLength(bobSetLength_CallResult);
                     List<String> bobMetadataDecode = Splitter.on('|').splitToList(decodeHexString(bobMetadata_CallResult.getOutput().toHexString()));
-                    String hxAlphaString = bobMetadataDecode.get(0);
-                    String peqtString = bobMetadataDecode.get(1);
+                    String hxAlpha_BobString = bobMetadataDecode.get(0);
+                    String peqt_BobString = bobMetadataDecode.get(1);
                     try {
-                        final String[] results = PsiMain.executeClient2("HFH99_ECC_COMPRESS", privateSet.get().toHexString(), hxAlphaString, peqtString, betaString, bobSetLength);
+                        final String[] executeClientResults = PsiMain.executeClient2("HFH99_ECC_COMPRESS", privateSet.get().toHexString(), hxAlpha_BobString, peqt_BobString, beta_AliceString, bobSetLength);
 
-                        LOG.info("Intersection: {}", results[0]);
-                        Bytes result = Bytes.wrap(results[0].getBytes(StandardCharsets.UTF_8));
+                        LOG.info("Intersection Alice: {}", executeClientResults[0]);
+                        Bytes result = Bytes.wrap(executeClientResults[0].getBytes(StandardCharsets.UTF_8));
+                        return new PrecompileContractResult(
+                                result, true, MessageFrame.State.CODE_SUCCESS, Optional.empty());
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            }
+        }
+        return NO_RESULT;
+    }
+
+    private PrecompileContractResult handleConsumeAlice_TwoWay(
+            final PrivateTransaction privateTransaction,
+            final MutableWorldState disposablePrivateState,
+            final Bytes32 privacyGroupId,
+            final MessageFrame messageFrame,
+            final WorldUpdater privateWorldStateUpdater,
+            final Address privateContractAddress) {
+        Optional<Bytes> beta_Alice = getBetaFromExtendedStorage(privateContractAddress);
+        if (beta_Alice.isPresent()) {
+            byte[] byteArray = beta_Alice.get().toArray();
+            String beta_AliceString = new String(byteArray, StandardCharsets.UTF_8);
+            final Optional<Bytes> privateSet = getPrivateSetFromExtendedStorage(privateContractAddress);
+            if (privateSet.isPresent()) {
+                final TransactionProcessingResult bobMetadata_CallResult =
+                        transactionCall(privateTransaction, disposablePrivateState, privacyGroupId,
+                                privateTransactionProcessor, messageFrame,
+                                privateWorldStateUpdater, privateContractAddress,
+                                BOB_METADATA_SIGNATURE);
+                final TransactionProcessingResult bobSetLength_CallResult  =
+                        transactionCall(privateTransaction, disposablePrivateState, privacyGroupId,
+                                privateTransactionProcessor, messageFrame,
+                                privateWorldStateUpdater, privateContractAddress,
+                                BOB_SET_LENGTH_SIGNATURE);
+
+                if(bobMetadata_CallResult.isSuccessful() && bobSetLength_CallResult.isSuccessful()){
+                    final int bobSetLength = getSetLength(bobSetLength_CallResult);
+                    List<String> bobMetadataDecode = Splitter.on('|').splitToList(decodeHexString(bobMetadata_CallResult.getOutput().toHexString()));
+                    String hyBeta_BobString = bobMetadataDecode.get(0);
+                    String hxAlpha_BobString = bobMetadataDecode.get(1);
+                    String peqt_BobString = bobMetadataDecode.get(2);
+                    try {
+                        final String[] executeServerResults = PsiMain.executeServer("HFH99_ECC_COMPRESS", privateSet.get().toHexString(), hyBeta_BobString, bobSetLength);
+                        final String[] executeClientResults = PsiMain.executeClient2("HFH99_ECC_COMPRESS", privateSet.get().toHexString(), hxAlpha_BobString, peqt_BobString, beta_AliceString, bobSetLength);
+
+                        writeToFile("files/hxAlpha_Alice.txt", executeServerResults[0]);
+                        writeToFile("files/peqt_Alice.txt", executeServerResults[1]);
+
+                        LOG.info("Intersection Alice: {}", executeClientResults[0]);
+                        Bytes result = Bytes.wrap(executeClientResults[0].getBytes(StandardCharsets.UTF_8));
+                        return new PrecompileContractResult(
+                                result, true, MessageFrame.State.CODE_SUCCESS, Optional.empty());
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                }
+            }
+        }
+        return NO_RESULT;
+    }
+
+    private PrecompileContractResult handleConsumeBob_TwoWay(
+            final PrivateTransaction privateTransaction,
+            final MutableWorldState disposablePrivateState,
+            final Bytes32 privacyGroupId,
+            final MessageFrame messageFrame,
+            final WorldUpdater privateWorldStateUpdater,
+            final Address privateContractAddress) {
+        Optional<Bytes> beta_Bob = getBetaFromExtendedStorage(privateContractAddress);
+        if (beta_Bob.isPresent()) {
+            byte[] byteArray = beta_Bob.get().toArray();
+            String beta_BobString = new String(byteArray, StandardCharsets.UTF_8);
+            final Optional<Bytes> privateSet = getPrivateSetFromExtendedStorage(privateContractAddress);
+            if (privateSet.isPresent()) {
+                final TransactionProcessingResult aliceMetadata_CallResult =
+                        transactionCall(privateTransaction, disposablePrivateState, privacyGroupId,
+                                privateTransactionProcessor, messageFrame,
+                                privateWorldStateUpdater, privateContractAddress,
+                                ALICE_METADATA_SIGNATURE);
+                final TransactionProcessingResult aliceSetLength_CallResult  =
+                        transactionCall(privateTransaction, disposablePrivateState, privacyGroupId,
+                                privateTransactionProcessor, messageFrame,
+                                privateWorldStateUpdater, privateContractAddress,
+                                ALICE_SET_LENGTH_SIGNATURE);
+
+                if(aliceMetadata_CallResult.isSuccessful() && aliceSetLength_CallResult.isSuccessful()){
+                    final int aliceSetLength = getSetLength(aliceSetLength_CallResult);
+                    List<String> aliceMetadataDecode = Splitter.on('|').splitToList(decodeHexString(aliceMetadata_CallResult.getOutput().toHexString()));
+                    String hxAlpha_AliceString = aliceMetadataDecode.get(0);
+                    String peqt_AliceString = aliceMetadataDecode.get(1);
+                    try {
+                        final String[] executeClientResults = PsiMain.executeClient2("HFH99_ECC_COMPRESS", privateSet.get().toHexString(), hxAlpha_AliceString, peqt_AliceString, beta_BobString, aliceSetLength);
+
+                        LOG.info("Intersection Bob: {}", executeClientResults[0]);
+                        Bytes result = Bytes.wrap(executeClientResults[0].getBytes(StandardCharsets.UTF_8));
                         return new PrecompileContractResult(
                                 result, true, MessageFrame.State.CODE_SUCCESS, Optional.empty());
                     } catch (Exception e) {
@@ -324,6 +488,11 @@ public class FlexiblePsiPrecompiledContract extends AbstractPrecompiledContract{
     private Optional<Bytes> getAliceAddressFromExtendedStorage(final Address privateContractAddress) {
         return extendedPrivacyStorage.getAliceAddressByContractAddress_Alice(
                 Bytes.concatenate(privateContractAddress, Bytes.wrap("_Alice".getBytes(StandardCharsets.UTF_8))));
+    }
+
+    private Optional<Bytes> getBobAddressFromExtendedStorage(final Address privateContractAddress) {
+        return extendedPrivacyStorage.getBobAddressByContractAddress_Bob(
+                Bytes.concatenate(privateContractAddress, Bytes.wrap("_Bob".getBytes(StandardCharsets.UTF_8))));
     }
 
     private Optional<Bytes> getPrivateSetFromExtendedStorage(final Address privateContractAddress) {
@@ -343,16 +512,32 @@ public class FlexiblePsiPrecompiledContract extends AbstractPrecompiledContract{
         updater.commit();
     }
 
-    private boolean isAliceSetIsReadyMethod(final Bytes methodCalled) {
-        return methodCalled.equals(Bytes.fromHexString(ALICE_COMPLETED_SET_LOADING_SIGNATURE));
+    private boolean isAliceCompleteSetLoading_OneWayMethod(final Bytes methodCalled) {
+        return methodCalled.equals(Bytes.fromHexString(ALICE_COMPLETE_SET_LOADING_ONE_WAY_SIGNATURE));
     }
 
-    private boolean isBobSetIsReadyMethod(final Bytes methodCalled) {
-        return methodCalled.equals(Bytes.fromHexString(BOB_COMPLETED_SET_LOADING_SIGNATURE));
+    private boolean isAliceCompleteSetLoading_TwoWayMethod(final Bytes methodCalled) {
+        return methodCalled.equals(Bytes.fromHexString(ALICE_COMPLETE_SET_LOADING_TWO_WAY_SIGNATURE));
     }
 
-    private boolean isConsumeMethod(final Bytes methodCalled) {
-        return methodCalled.equals(Bytes.fromHexString(CONSUME_SIGNATURE));
+    private boolean isBobCompleteSetLoading_OneWayMethod(final Bytes methodCalled) {
+        return methodCalled.equals(Bytes.fromHexString(BOB_COMPLETE_SET_LOADING_ONE_WAY_SIGNATURE));
+    }
+
+    private boolean isBobCompleteSetLoading_TwoWayMethod(final Bytes methodCalled) {
+        return methodCalled.equals(Bytes.fromHexString(BOB_COMPLETE_SET_LOADING_TWO_WAY_SIGNATURE));
+    }
+
+    private boolean isConsumeAlice_TwoWayMethod(final Bytes methodCalled) {
+        return methodCalled.equals(Bytes.fromHexString(CONSUME_ALICE_TWO_WAY_SIGNATURE));
+    }
+
+    private boolean isConsumeAlice_OneWayMethod(final Bytes methodCalled) {
+        return methodCalled.equals(Bytes.fromHexString(CONSUME_ALICE_ONE_WAY_SIGNATURE));
+    }
+
+    private boolean isConsumeBob_TwoWayMethod(final Bytes methodCalled) {
+        return methodCalled.equals(Bytes.fromHexString(CONSUME_BOB_TWO_WAY_SIGNATURE));
     }
 
     private int getSetLength(final TransactionProcessingResult result) {
