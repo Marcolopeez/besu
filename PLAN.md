@@ -140,7 +140,7 @@ Justificación:
 
 ---
 
-## 6. Desviaciones respecto del Draft (propuestas)
+## 6. Desviaciones respecto del Draft
 
 | Id | Desviación | Motivo |
 |---|---|---|
@@ -149,7 +149,7 @@ Justificación:
 | DV-3 | No se expulsan del pool las pendientes al recibir un bloque (el «should» de l. 83). Se borran al seleccionarlas | Lo que ya hace `ProcessingResultTransactionSelector` (l. 79–116). FI-7 lo registra |
 | DV-4 | Rechazo con el motivo existente `TX_SENDER_NOT_AUTHORIZED` y un mensaje propio | Evita tocar `TransactionInvalidReason`, `RpcErrorType` y el conversor |
 
-Las cuatro van a DECISIONES como D-24 y D-25 (propuestas).
+Registradas en DECISIONES como D-24 (DV-1) y D-25 (DV-2 a DV-4), aprobadas el 17-11.
 
 ---
 
@@ -174,7 +174,7 @@ Coste: unos 9500 de gas más el DELEGATECALL (acceso frío al helper). Hay que m
 
 ### 7.2 Encaje con V1 y D-22
 
-**Discrepancia que hay que resolver:** ESPECIFICACION §2.2 dice `SETSELFDELEGATE(d)`, pero D-22 y §2.4 piden `ind(a) = 0xef0101‖proxy`. Además, si la autorización delega en el proxy `P`, el slot de implementación de `a` todavía está vacío al ejecutar T1. Propuesta (D-26, propuesta):
+**Discrepancia (resuelta por D-26):** ESPECIFICACION §2.2 dice `SETSELFDELEGATE(d)`, pero D-22 y §2.4 piden `ind(a) = 0xef0101‖proxy`. Además, si la autorización delega en el proxy `P`, el slot de implementación de `a` todavía está vacío al ejecutar T1. Decisión (D-26, aprobada el 17-11):
 
 - La tupla de T1 delega en la **implementación** `d` (OTS-C1): `ind(a) = 0xef0100‖d`.
 - `initializeAndRetire(s_1, [ρ_1, ρ_2])`, ejecutada en el contexto de `a`:
@@ -275,7 +275,7 @@ Unos 25 tests. La mayoría son variaciones de tests que ya existen.
 | R3. Comprobaciones de estilo de Besu (spotless, errorprone, javadoc obligatorio en `evm`) | Compilación rota por formato | `./gradlew spotlessApply`; javadoc desde el principio |
 | R4. Motor de bloques por Engine API | Retraso en H0/H2 | Copiar el JSON de `PragueAcceptanceTestHelper`. Alternativa: QBFT de un nodo (B-9) |
 | R5. Foundry: `forge script` y la simulación con revm | Fallos opacos | Usar `cast` y viem para todo lo que toque `0xac` |
-| R6. Diseño de OTS-C1 abierto: §2.2 frente a D-22, `retire()` con argumento, esquema de la redelegación | Retraso en H3 | Decidir D-26 antes de H3 |
+| R6. Diseño de OTS-C1 abierto: §2.2 frente a D-22, `retire()` con argumento, esquema de la redelegación | Retraso en H3 | D-26 decidida (17-11); queda el esquema de la redelegación |
 | R7. El Draft cambia (`af5ea766`, 05-11) | Desfase con la versión en línea | Volver a comprobar el commit antes del envío (`VERSIONES.md`) |
 | R8. Competencia con las tareas 2 y 3 | X1 no llega | Hitos G1–G3 (§12) |
 | R9. EVM v2 activada por error | `0xac` sin implementar en v2 | No usar `--Xevm-v2`. Pendiente: confirmar el comportamiento de `OperationsV2.of` |
