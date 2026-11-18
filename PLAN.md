@@ -263,7 +263,7 @@ Unos 25 tests. La mayoría son variaciones de tests que ya existen.
 | **H0** Entorno | JDK 25 en el Mac; compilar el commit; pasar los tests de 7702 existentes; devnet Prague dirigida por Engine API; humo 7702 | Nada de X1; elimina el riesgo de entorno |
 | **H1** Besu C1 | Cambios de §3 y tests de §8. **Hecho el 18-11 (G2 cumplido)** | B-2 a B-6 a nivel unitario |
 | **H2** Aceptación en devnet | Besu C1 en la devnet, con el helper y un delegado trivial (sin OTS-C1). **Hecho el 18-11 (36/36 V)** | B-10; OP-tx, OP-auth y OP-permit tras una retirada directa; EXTCODE*; **FI-1**, **FI-3**, **FI-4**, **FI-7**, **FI-8** a nivel de protocolo; FI-9 opcional |
-| **H3** OTS-C1 | `initializeAndRetire`, `retire()`, `P`, redelegación con `ρ`; tests Foundry con el helper simulado | Lógica de C1-cl-O, C1-ql-O y C1-qr-O en Foundry (OP-redel, OP-adv) |
+| **H3** OTS-C1 | `initializeAndRetire`, `retire()`, `P`, redelegación con `ρ`; tests Foundry con el helper simulado. **Hecho el 18-11 en Foundry (26/26), en `ots/c1/`, rama `research/c1` (D-47)** | Lógica de C1-cl-O, C1-ql-O y C1-qr-O en Foundry (OP-redel, OP-adv) |
 | **H4a** X1-V1 | T1 de §2.2 en la devnet | **C1-cl-M**, **C1-ql-M** (mismo ensayo con otra entrega de claves), **FI-2**, FI-3 y FI-4 con OTS-C1 (FI-3 necesita una variante de prueba sin la comprobación del valor devuelto), **C1-hc-M** en los dos órdenes, **C1-qr-M** (carrera con la autorización del atacante; FI-8) |
 | **H4b** X1-V2 y control | T1 + T2a/T2b; ejecuciones de control | **FI-5**, **FI-6**, FI-7 con OTS; C1-cl-O/R y C1-hc-O/R (una ejecución de control cada una); OP-redel en Besu |
 | H5 (fuera de X1) | X4 en C1 | X4-1 a X4-4 en Besu |
