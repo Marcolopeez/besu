@@ -155,7 +155,7 @@ Registradas en DECISIONES como D-24 (DV-1) y D-25 (DV-2 a DV-4), aprobadas el 17
 
 ---
 
-## 7. Lado OTS-C1 (diseño, sin código)
+## 7. Lado OTS-C1 (diseño; implementado en H3, `ots/c1/`)
 
 ### 7.1 Cómo se emite `SETSELFDELEGATE`
 
@@ -196,6 +196,8 @@ Coste: unos 9500 de gas más el DELEGATECALL (acceso frío al helper). Hay que m
 - Después de la retirada, `SETSELFDELEGATE` no se usa más. La redelegación es una escritura del slot autorizada con una `ρ` (D-22, D-23).
 
 **Redelegación (D-22, D-23):** una función que verifica una firma EIP-712 de una `ρ` activa sobre `(nuevaImplementación, siguienteρ, nonce/dominio)`, consume la `ρ`, registra la sucesora y escribe el slot. Si la sucesora no es válida, pausa en vez de revertir (patrón de OTS l. 500–519). Puntos abiertos para el autor: el esquema exacto del struct; si cambiar la implementación debe exigir que la nueva tenga el mismo layout; y el cambio de nombre de la clave (D-23).
+
+*Hecho en H3 (18-11, `ots/c1/`, `6508e6eb`):* el mensaje es `Redelegation(newImplementation, nextManagementSigner, deadline)` sin nonce (D-48); se exige ERC-1822 y, si no se puede aplicar, se consume `μ`, el slot no cambia y se instala la sucesora (D-49); una sucesora inválida no se instala y no pausa (D-50); la revocación de D-35 usa épocas de gestión.
 
 ### 7.3 Herramientas contra la devnet
 
