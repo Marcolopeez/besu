@@ -39,7 +39,7 @@ Lo leído en el código y no ejecutado es **D** (D-19). Las estimaciones y todo 
 
 **Dónde compilar:**
 
-1. **En el Mac del autor (recomendado).** Necesita JDK 25 y RAM ≥ 8 GB (H; no se conocen las características del Mac). Clonar fuera del repositorio del paper, en la rama `research/eip-7851` y el commit `85a51a11`. El tiempo de la primera compilación no está medido (H).
+1. **En el Mac del autor (recomendado).** Necesita JDK 25 y RAM ≥ 8 GB (H; no se conocen las características del Mac). Clonar fuera del repositorio del paper, en la rama `research/eip-7851` y el commit `85a51a11`. **Sustituido por D-43 (18-11):** desde H1 se trabaja en el propio submódulo `besu/`; el clon aparte solo se usó en H0. El tiempo de la primera compilación no está medido (H).
 2. **Alternativa:** habilitar en claude.ai (Settings › Capabilities, o el administrador de la organización) los dominios `services.gradle.org`, `plugins.gradle.org`, `repo1.maven.org`, `repo.maven.apache.org`, `hyperledger.jfrog.io`, `artifacts.consensys.net` y `splunk.jfrog.io`, más una fuente de JDK 25. Así Claude compilaría y pasaría los tests unitarios en la nube (2 núcleos: lento, H). La VM no sirve ni con red, porque tiene 3 GB frente a los 4 GB que pide Gradle.
 
 ---
