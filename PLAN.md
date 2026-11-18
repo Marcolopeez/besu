@@ -234,19 +234,19 @@ Unos 25 tests. La mayoría son variaciones de tests que ya existen.
 
 ## 9. Devnet local y despliegue de OTS-C1
 
-1. **Compilar** en el Mac (§1): `./gradlew installDist` (pendiente: confirmar la tarea y el tiempo). El binario queda en `build/install/besu/bin/besu` (H).
-2. **Génesis:** copia de `dev_prague.json` con chainId propio y:
+1. **Compilar** en el Mac (§1): `./gradlew installDist`. Es la tarea del proyecto raíz (`build.gradle` l. 1043–1045 y 1170; D), y de ella dependen los acceptance tests. En el Mac del autor (M3 Max, 36 GiB, Temurin 25.0.5) tarda **1 min 4 s en frío**, con un pico de RSS de los procesos java de ≈ 6,6 GiB (V, H0, 18-11). El binario queda en `build/install/besu/bin/besu` (V). Los acceptance tests necesitan Rosetta 2, porque compilan contratos con `solc-macos` 0.8.19, que es x86_64 (V). Detalle en `experimentos/besu-h0/resultados/2026-11-18-h0.md`.
+2. **Génesis:** copia de `dev_prague.json` con chainId propio. **H0:** `experimentos/besu-h0/config/genesis-h0.json` (chainId 785100), generada por `scripts/gen_genesis.py`, con h, relayer y atacante y sin las cuentas de prueba de Besu (V). Faltan los contratos de 4788 y 2935, como en `dev_prague.json`: Besu lo avisa con un WARN por bloque y sigue (V). Para H2 hay que añadir:
    - en `alloc`: `h` (Alicia), relayer, atacante y el helper (§7.1) con su código;
    - nada en `0xef0101` (§3, último párrafo).
-3. **Arranque (opciones comprobadas en el código):** `--genesis-file`; `--rpc-http-api` con ETH, NET, WEB3, DEBUG, TXPOOL y ENGINE (`JsonRpcHttpOptions.java` l. 90); `--engine-rpc-port` y `--engine-jwt-disabled` (`EngineRPCOptions.java` l. 40, 52); y la nueva `--Xeip7851-enabled`. **Pendiente:** precio mínimo de gas, `--data-path`, y si hace falta habilitar el RPC del motor aparte. Se toman del acceptance test `createExecutionEngineGenesisNode`.
-4. **Motor de bloques:** un script que repite `PragueAcceptanceTestHelper.buildNewBlock` (l. 57–114):
+3. **Arranque** (opciones de `createExecutionEngineGenesisNode` y `ProcessBesuNodeRunner`, D; aceptadas por Besu en H0, V): `experimentos/besu-h0/scripts/05a-arrancar-besu.sh`. Opciones: `--genesis-file`, `--data-path` (fuera del repositorio), `--sync-mode FULL`, `--discovery-enabled false`, `--rpc-http-api ETH,NET,WEB3,TXPOOL,DEBUG`, `--engine-rpc-port 8551 --engine-jwt-disabled`, `--min-gas-price 1000` (valor del acceptance test, `MiningConfiguration` l. 229), `--miner-extra-data 0x`, `--target-gas-limit 60000000`, `--data-storage-format BONSAI` y, en H1, la nueva `--Xeip7851-enabled`. **Corrección:** ENGINE **no** va en `--rpc-http-api`. El RPC del motor se activa solo cuando la génesis tiene `terminalTotalDifficulty` (`BesuCommand` l. 3081–3082 y 3138–3139) y sirve `ENGINE,ETH` en su puerto (l. 2297; D, V).
+4. **Motor de bloques:** `experimentos/besu-h0/scripts/engine_driver.py` (solo stdlib; V en H0: 6 bloques, todos VALID, con `finalized` = la nueva cabeza). Repite `PragueAcceptanceTestHelper.buildNewBlock` (l. 57–114):
    - `forkchoiceUpdatedV3` con atributos de payload;
    - `getPayloadV4`;
    - `newPayloadV4`;
    - `forkchoiceUpdatedV3` a la nueva cabeza, con `finalized` = la nueva cabeza (B-9).
    
    Para FI-9 (opcional): dos payloads hermanos del mismo padre y un `forkchoiceUpdated` al alternativo (H: no comprobado que Besu lo acepte sin un CL).
-5. **Humo:** una transacción 7702 con `cast` contra un delegado trivial, igual que en el acceptance test, primero con Besu sin cambios (H0).
+5. **Humo:** una transacción 7702 con `cast` contra un delegado trivial, igual que en el acceptance test, primero con Besu sin cambios (H0). **Hecho el 18-11 (V):** tipo 4 patrocinada por el relayer con la autorización de h; `eth_getCode(a) = 0xef0100‖d`; `nonce(h)` +1; `eth_call` y una tipo 2 a `a` ejecutan d en el contexto de `a`; `debug_traceTransaction`, con el struct logger y con `callTracer`, funciona (`experimentos/besu-h0/scripts/06-humo-7702.sh`). **G1 cumplido.**
 6. **Desplegar OTS-C1:** `forge create` de OTS-C1 (`d`, con `P` como inmutable) y de `P` (o `P` primero, con `d` en el constructor de nada: el slot lo escribe `a`). También testigos, `SenderVault`, `OriginGated` y `ERC20Permit`, si X4 entra.
 7. **Oráculos (§0.3 de ESPECIFICACION):** `eth_getCode(a)`, `eth_getStorageAt(a, slot)`, las *views* de OTS a través de `a`, `eth_getBalance`, recibos, el error de `eth_sendRawTransaction`, `txpool_besuTransactions` y `debug_traceTransaction`.
 
@@ -317,9 +317,18 @@ Unos 25 tests. La mayoría son variaciones de tests que ya existen.
 
 ## 13. No encontrado / pendiente (no supuesto)
 
+Pendiente:
+
 - Que `OperationsV2.of` cubra una operación sin versión v2 (solo afecta si se activa `--Xevm-v2`).
-- Si `eth_sendRawTransaction` devuelve el mensaje detallado además de `-32007`.
-- Las opciones exactas para arrancar la devnet además de las comprobadas (§9.3), y si Besu acepta reorgs por `forkchoiceUpdated` sin CL (FI-9).
-- Nombres exactos de las opciones de Foundry 1.5.1 (`--skip-simulation`, `cast send --auth`, `cast wallet sign-auth`) y si compila `.yul`.
-- Tiempo de compilación y memoria necesaria en el Mac del autor.
+- Si `eth_sendRawTransaction` devuelve el mensaje detallado además de `-32007`. Necesita C1: un remitente `0xef0101` (H2).
+- Si Besu acepta reorgs por `forkchoiceUpdated` sin CL (FI-9).
+- Foundry: si `forge script --skip-simulation` existe con ese nombre en la versión del Mac (**1.8.5**, no 1.5.1) y si compila `.yul`.
 - EIP-3541 no tiene copia local en `fuentes/`.
+
+Resuelto en H0 (18-11; `experimentos/besu-h0/resultados/2026-11-18-h0.md`):
+
+- **Tiempo y memoria (V):** con `./gradlew installDist --rerun-tasks --no-build-cache`, 1 min 4 s en un M3 Max de 36 GiB, con un pico de RSS de los procesos java de ≈ 6,6 GiB. Con la caché de Gradle, 15 s.
+- **Tarea de Gradle (D, V):** `installDist`, la del proyecto raíz.
+- **Opciones de la devnet (D, V):** §9.3. Precio mínimo de gas: 1000. `--data-path` fuera del repositorio. El RPC del motor se activa solo por el TTD de la génesis; ENGINE no va en `--rpc-http-api`.
+- **Opciones de cast (V, cast 1.8.5 `51a52c59`):** `cast send --auth <AUTH>` acepta una autorización firmada en hexadecimal o una dirección. Existen `--async`, `--create <CODE>`, `--gas-limit` y `--priority-gas-price`. `cast wallet sign-auth [OPTIONS] <ADDRESS>` tiene `--nonce` y `--chain`; sin ellas toma de la RPC el chainId y el nonce del firmante. El Mac tiene Foundry 1.8.5; la VM y los ensayos de C0, 1.5.1 (D-32).
+- **Tests de 7702 sin cambios (V):** 144 unitarios en 14 clases y los 4 de `CodeDelegationTransactionAcceptanceTest`. Este último necesita Rosetta 2.
