@@ -39,6 +39,12 @@ public class CodeDelegationHelper {
   /** The prefix that is used to identify delegated code */
   public static final Bytes CODE_DELEGATION_PREFIX = Bytes.fromHexString("ef0100");
 
+  /**
+   * The prefix of an ECDSA-disabled delegation (EIP-7851, Draft; experimental realization). It has
+   * the same length as {@link #CODE_DELEGATION_PREFIX}.
+   */
+  public static final Bytes ECDSA_DISABLED_DELEGATION_PREFIX = Bytes.fromHexString("ef0101");
+
   /** The size of the delegated code */
   public static final int DELEGATED_CODE_SIZE = CODE_DELEGATION_PREFIX.size() + Address.SIZE;
 
@@ -48,22 +54,41 @@ public class CodeDelegationHelper {
   }
 
   /**
-   * Returns if the provided code is delegated code.
+   * Returns if the provided code is delegated code: exactly 23 bytes starting with {@code 0xef0100}
+   * (EIP-7702) or {@code 0xef0101} (ECDSA-disabled delegation, EIP-7851). Both are treated
+   * identically for delegated code execution.
    *
    * @param code the code to check.
    * @return {@code true} if the code is delegated code, {@code false} otherwise.
    */
   public static boolean hasCodeDelegation(final Bytes code) {
+    if (code == null || code.size() != DELEGATED_CODE_SIZE) {
+      return false;
+    }
+    final Bytes prefix = code.slice(0, CODE_DELEGATION_PREFIX.size());
+    return prefix.equals(CODE_DELEGATION_PREFIX) || prefix.equals(ECDSA_DISABLED_DELEGATION_PREFIX);
+  }
+
+  /**
+   * Returns if the provided code is an ECDSA-disabled delegation (EIP-7851): exactly 23 bytes
+   * starting with {@code 0xef0101}.
+   *
+   * @param code the code to check.
+   * @return {@code true} if the code is an ECDSA-disabled delegation, {@code false} otherwise.
+   */
+  public static boolean hasEcdsaDisabledDelegation(final Bytes code) {
     return code != null
         && code.size() == DELEGATED_CODE_SIZE
-        && code.slice(0, CODE_DELEGATION_PREFIX.size()).equals(CODE_DELEGATION_PREFIX);
+        && code.slice(0, ECDSA_DISABLED_DELEGATION_PREFIX.size())
+            .equals(ECDSA_DISABLED_DELEGATION_PREFIX);
   }
 
   /**
    * return the target address from the byte code. The method assumes that the byte code is a valid
-   * according to EIP-7702
+   * according to EIP-7702 or EIP-7851 (both prefixes have the same length)
    *
-   * @param code the 7702 byte code in the form CODE_DELEGATION_PREFIX + target address
+   * @param code the 7702 byte code in the form CODE_DELEGATION_PREFIX + target address, or
+   *     ECDSA_DISABLED_DELEGATION_PREFIX + target address
    * @return the address of the target
    */
   public static Address getTargetAddress(final Bytes code) {

@@ -121,6 +121,7 @@ import org.hyperledger.besu.evm.operation.SarOperation;
 import org.hyperledger.besu.evm.operation.SarOperationOptimized;
 import org.hyperledger.besu.evm.operation.SelfBalanceOperation;
 import org.hyperledger.besu.evm.operation.SelfDestructOperation;
+import org.hyperledger.besu.evm.operation.SetSelfDelegateOperation;
 import org.hyperledger.besu.evm.operation.ShlOperation;
 import org.hyperledger.besu.evm.operation.ShlOperationOptimized;
 import org.hyperledger.besu.evm.operation.ShrOperation;
@@ -1010,6 +1011,11 @@ public class MainnetEVMs {
       final BigInteger chainID,
       final EvmConfiguration evmConfiguration) {
     registerCancunOperations(registry, gasCalculator, chainID, evmConfiguration);
+
+    // EIP-7851 (Draft): SETSELFDELEGATE, experimental and opt-in (deviations DV-1 and DV-2)
+    if (evmConfiguration.enableEip7851()) {
+      registry.put(new SetSelfDelegateOperation(gasCalculator));
+    }
   }
 
   /**

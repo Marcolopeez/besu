@@ -68,6 +68,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.junit.jupiter.params.provider.FieldSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
@@ -1084,6 +1085,90 @@ public class MainnetTransactionValidatorTest extends TrustedSetupClassLoaderExte
 
   private Account accountWithNonce(final long nonce) {
     return account(basicTransaction.getUpfrontCost(0L), nonce);
+  }
+
+  // --- EIP-7851 (Draft): a sender with an ECDSA-disabled delegation (0xef0101) ---
+
+  private static final Address EIP7851_DELEGATE =
+      Address.fromHexString("0xd000000000000000000000000000000000007851");
+
+  private Account senderWithCode(final Transaction transaction, final Bytes code) {
+    final Account sender = account(Wei.of(1_000_000_000_000L), transaction.getNonce());
+    when(sender.getCodeHash()).thenReturn(Hash.hash(code));
+    when(sender.getCode()).thenReturn(code);
+    return sender;
+  }
+
+  private Transaction transactionOfType(final TransactionType type) {
+    return new TransactionTestFixture()
+        .type(type)
+        .nonce(30)
+        .chainId(Optional.of(BigInteger.ONE))
+        .createTransaction(senderKeys);
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = TransactionType.class,
+      names = {"FRONTIER", "EIP1559", "DELEGATE_CODE"})
+  public void shouldRejectSenderWithEcdsaDisabledDelegation(final TransactionType type) {
+    final TransactionValidator validator =
+        createTransactionValidator(
+            gasCalculator, GasLimitCalculator.constant(), false, Optional.empty());
+    final Transaction transaction = transactionOfType(type);
+    final Account sender =
+        senderWithCode(
+            transaction,
+            Bytes.concatenate(Bytes.fromHexString("ef0101"), EIP7851_DELEGATE.getBytes()));
+
+    for (final TransactionValidationParams params :
+        List.of(processingBlockParams, transactionPoolParams)) {
+      final ValidationResult<TransactionInvalidReason> result =
+          validator.validateForSender(transaction, sender, params);
+      assertThat(result.isValid()).isFalse();
+      assertThat(result.getInvalidReason())
+          .isEqualTo(TransactionInvalidReason.TX_SENDER_NOT_AUTHORIZED);
+      assertThat(result.getErrorMessage()).contains("ECDSA-disabled delegation (EIP-7851)");
+    }
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = TransactionType.class,
+      names = {"FRONTIER", "EIP1559", "DELEGATE_CODE"})
+  public void shouldAcceptSenderWithEcdsaEnabledDelegation(final TransactionType type) {
+    final TransactionValidator validator =
+        createTransactionValidator(
+            gasCalculator, GasLimitCalculator.constant(), false, Optional.empty());
+    final Transaction transaction = transactionOfType(type);
+    final Account sender =
+        senderWithCode(
+            transaction,
+            Bytes.concatenate(Bytes.fromHexString("ef0100"), EIP7851_DELEGATE.getBytes()));
+
+    for (final TransactionValidationParams params :
+        List.of(processingBlockParams, transactionPoolParams)) {
+      assertThat(validator.validateForSender(transaction, sender, params))
+          .isEqualTo(ValidationResult.valid());
+    }
+  }
+
+  @Test
+  public void shouldRejectSenderWithOtherEf01PrefixAsContract() {
+    final TransactionValidator validator =
+        createTransactionValidator(
+            gasCalculator, GasLimitCalculator.constant(), false, Optional.empty());
+    final Transaction transaction = transactionOfType(TransactionType.FRONTIER);
+    final Account sender =
+        senderWithCode(
+            transaction,
+            Bytes.concatenate(Bytes.fromHexString("ef0102"), EIP7851_DELEGATE.getBytes()));
+
+    final ValidationResult<TransactionInvalidReason> result =
+        validator.validateForSender(transaction, sender, processingBlockParams);
+    assertThat(result.getInvalidReason())
+        .isEqualTo(TransactionInvalidReason.TX_SENDER_NOT_AUTHORIZED);
+    assertThat(result.getErrorMessage()).contains("has deployed code");
   }
 
   private Account account(final Wei balance, final long nonce) {

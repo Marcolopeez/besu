@@ -77,6 +77,8 @@ Lo leído en el código y no ejecutado es **D** (D-19). Las estimaciones y todo 
 
 ## 3. Cambios por regla de EIP-7851 (Besu `85a51a11`)
 
+**Hecho en H1 (18-11, V):** los cambios de esta tabla, salvo `OpcodeInfo` (solo sirve para imprimir) y la expulsión opcional del pool (DV-3). Detalle en `experimentos/besu-h1/resultados/2026-11-18-h1.md`.
+
 **Idea central (H, apoyada en D):** `hasCodeDelegation` es el único punto donde Besu decide qué es una delegación. Si acepta también `0xef0101`, la ejecución, el gas y EXTCODE* quedan cubiertos. Pero entonces dos sitios que hoy rechazan `0xef0101` «por accidente» empezarían a aceptarlo: la regla de origen y `canSetCodeDelegation`. Ahí hay que añadir exclusiones explícitas.
 
 Alternativa descartada: dejar `hasCodeDelegation` estricto y crear un predicado nuevo para la ejecución. Obliga a tocar unos diez sitios de llamada (§2) y es fácil olvidar uno.
@@ -230,6 +232,8 @@ Modelos existentes: `besu/evm/src/test/java/org/hyperledger/besu/evm/worldstate/
 
 Unos 25 tests. La mayoría son variaciones de tests que ya existen.
 
+**Hecho en H1 (18-11, V):** 50 tests nuevos, en verde, más las suites enteras de `:evm` (5131), `:ethereum:core` (2355) y `:ethereum:eth` (2937), sin fallos. Cambios respecto de esta tabla: el «Pool» se queda en el validador, porque los tests del pool simulan el validador, y pasa a H2 en la devnet. El «Revert» se prueba con un updater sin commit y con un EVM completo (`ToyWorld`), no en JOURNALED. Se añade una ejecución completa con el helper y DELEGATECALL (`SetSelfDelegateExecutionTest`).
+
 ---
 
 ## 9. Devnet local y despliegue de OTS-C1
@@ -257,7 +261,7 @@ Unos 25 tests. La mayoría son variaciones de tests que ya existen.
 | Hito | Contenido | Habilita |
 |---|---|---|
 | **H0** Entorno | JDK 25 en el Mac; compilar el commit; pasar los tests de 7702 existentes; devnet Prague dirigida por Engine API; humo 7702 | Nada de X1; elimina el riesgo de entorno |
-| **H1** Besu C1 | Cambios de §3 y tests de §8 | B-2 a B-6 a nivel unitario |
+| **H1** Besu C1 | Cambios de §3 y tests de §8. **Hecho el 18-11 (G2 cumplido)** | B-2 a B-6 a nivel unitario |
 | **H2** Aceptación en devnet | Besu C1 en la devnet, con el helper y un delegado trivial (sin OTS-C1) | B-10; OP-tx, OP-auth y OP-permit tras una retirada directa; EXTCODE*; **FI-1**, **FI-3**, **FI-4**, **FI-7**, **FI-8** a nivel de protocolo; FI-9 opcional |
 | **H3** OTS-C1 | `initializeAndRetire`, `retire()`, `P`, redelegación con `ρ`; tests Foundry con el helper simulado | Lógica de C1-cl-O, C1-ql-O y C1-qr-O en Foundry (OP-redel, OP-adv) |
 | **H4a** X1-V1 | T1 de §2.2 en la devnet | **C1-cl-M**, **C1-ql-M** (mismo ensayo con otra entrega de claves), **FI-2**, FI-3 y FI-4 con OTS-C1 (FI-3 necesita una variante de prueba sin la comprobación del valor devuelto), **C1-hc-M** en los dos órdenes, **C1-qr-M** (carrera con la autorización del atacante; FI-8) |
@@ -319,7 +323,9 @@ Unos 25 tests. La mayoría son variaciones de tests que ya existen.
 
 Pendiente:
 
-- Que `OperationsV2.of` cubra una operación sin versión v2 (solo afecta si se activa `--Xevm-v2`).
+- Que `OperationsV2.of` cubra una operación sin versión v2 (solo afecta si se activa `--Xevm-v2`). No se ha probado en H1.
+- SETSELFDELEGATE en el modo JOURNALED (H1 solo con STACKED, que es el de la devnet).
+- El rechazo en el pool de un remitente `ef0101` por `eth_sendRawTransaction` y la retirada de pendientes (DV-3, FI-7): a la devnet, en H2.
 - Si `eth_sendRawTransaction` devuelve el mensaje detallado además de `-32007`. Necesita C1: un remitente `0xef0101` (H2).
 - Si Besu acepta reorgs por `forkchoiceUpdated` sin CL (FI-9).
 - Foundry: si `forge script --skip-simulation` existe con ese nombre en la versión del Mac (**1.8.5**, no 1.5.1) y si compila `.yul`.
@@ -332,3 +338,9 @@ Resuelto en H0 (18-11; `experimentos/besu-h0/resultados/2026-11-18-h0.md`):
 - **Opciones de la devnet (D, V):** §9.3. Precio mínimo de gas: 1000. `--data-path` fuera del repositorio. El RPC del motor se activa solo por el TTD de la génesis; ENGINE no va en `--rpc-http-api`.
 - **Opciones de cast (V, cast 1.8.5 `51a52c59`):** `cast send --auth <AUTH>` acepta una autorización firmada en hexadecimal o una dirección. Existen `--async`, `--create <CODE>`, `--gas-limit` y `--priority-gas-price`. `cast wallet sign-auth [OPTIONS] <ADDRESS>` tiene `--nonce` y `--chain`; sin ellas toma de la RPC el chainId y el nonce del firmante. El Mac tiene Foundry 1.8.5; la VM y los ensayos de C0, 1.5.1 (D-32).
 - **Tests de 7702 sin cambios (V):** 144 unitarios en 14 clases y los 4 de `CodeDelegationTransactionAcceptanceTest`. Este último necesita Rosetta 2.
+
+Resuelto en H1 (18-11; `experimentos/besu-h1/resultados/2026-11-18-h1.md`):
+
+- R2 (V): ampliar `hasCodeDelegation` no rompe ningún test de `:evm`, `:ethereum:core` ni `:ethereum:eth`.
+- R3 (V): `spotlessCheck` y javadoc de `evm` y `app`, correctos.
+- Indicador (V): `--Xeip7851-enabled` (oculto) → `EvmConfiguration.enableEip7851` → registro en Prague y posteriores.

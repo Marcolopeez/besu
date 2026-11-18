@@ -15,10 +15,13 @@
 package org.hyperledger.besu.evm.gascalculator;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import org.hyperledger.besu.datatypes.Address;
+import org.hyperledger.besu.datatypes.Hash;
 import org.hyperledger.besu.datatypes.Transaction;
+import org.hyperledger.besu.evm.account.Account;
 import org.hyperledger.besu.evm.frame.MessageFrame;
 
 import java.util.Collections;
@@ -29,6 +32,8 @@ import org.apache.tuweni.bytes.Bytes;
 import org.assertj.core.api.AssertionsForClassTypes;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
@@ -172,5 +177,25 @@ class PragueGasCalculatorTest {
     when(transaction.getPayloadZeroBytes()).thenReturn(5L);
     AssertionsForClassTypes.assertThat(pragueGasCalculator.transactionFloorCost(transaction))
         .isEqualTo(21290L);
+  }
+
+  // EIP-7851 (Draft): resolving 0xef0101 || d costs the same as resolving 0xef0100 || d
+
+  @ParameterizedTest
+  @ValueSource(strings = {"ef0100", "ef0101"})
+  void delegationResolutionGasIsTheSameForBothPrefixes(final String prefix) {
+    final Address target = Address.fromHexString("0x00000000000000000000000000000000000d7851");
+    final Bytes code = Bytes.concatenate(Bytes.fromHexString(prefix), target.getBytes());
+    final Account account = mock(Account.class);
+    when(account.getCodeHash()).thenReturn(Hash.hash(code));
+    when(account.getCode()).thenReturn(code);
+
+    when(messageFrame.warmUpAddress(target)).thenReturn(false);
+    assertThat(pragueGasCalculator.calculateCodeDelegationResolutionGas(messageFrame, account))
+        .isEqualTo(pragueGasCalculator.getColdAccountAccessCost());
+
+    when(messageFrame.warmUpAddress(target)).thenReturn(true);
+    assertThat(pragueGasCalculator.calculateCodeDelegationResolutionGas(messageFrame, account))
+        .isEqualTo(pragueGasCalculator.getWarmStorageReadCost());
   }
 }

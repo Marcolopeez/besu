@@ -126,6 +126,29 @@ class TopLevelTransactionSupportTest {
   }
 
   @Test
+  void ecdsaDisabledDelegatedAccountResolvesThroughTheCallersFunction() {
+    // EIP-7851 (Draft): 0xef0101 || d executes like 0xef0100 || d
+    final Bytes ecdsaDisabled =
+        Bytes.concatenate(CodeDelegationHelper.ECDSA_DISABLED_DELEGATION_PREFIX, TARGET.getBytes());
+    final Account account = mock(Account.class);
+    when(account.getCodeHash()).thenReturn(Hash.hash(ecdsaDisabled));
+    when(account.getCode()).thenReturn(ecdsaDisabled);
+    final Code targetCode = new Code(CONTRACT_CODE);
+
+    final Code code =
+        support(london)
+            .accountCode(
+                account,
+                delegated -> {
+                  assertThat(delegated).isSameAs(account);
+                  return targetCode;
+                });
+
+    assertThat(code).isSameAs(targetCode);
+    verifyNoInteractions(messageCallProcessor);
+  }
+
+  @Test
   void accountWithCodeCacheRunsItsCachedCode() {
     final Account account = mock(Account.class);
     final Code cachedCode = new Code(CONTRACT_CODE);

@@ -17,6 +17,7 @@ package org.hyperledger.besu.ethereum.mainnet;
 import static org.hyperledger.besu.evm.account.Account.MAX_NONCE;
 import static org.hyperledger.besu.evm.internal.Words.clampedAdd;
 import static org.hyperledger.besu.evm.worldstate.CodeDelegationHelper.hasCodeDelegation;
+import static org.hyperledger.besu.evm.worldstate.CodeDelegationHelper.hasEcdsaDisabledDelegation;
 
 import org.hyperledger.besu.crypto.SECPSignature;
 import org.hyperledger.besu.crypto.SignatureAlgorithmFactory;
@@ -352,6 +353,19 @@ public class MainnetTransactionValidator implements TransactionValidator {
               transaction.getNonce(), senderNonce, transaction.getSender()));
     }
 
+    // EIP-7851 (Draft): a sender with an ECDSA-disabled delegation (0xef0101) cannot originate
+    // ECDSA-authenticated transactions. Same reason as below, with its own message (deviation
+    // DV-4).
+    if (!validationParams.isAllowContractAddressAsSender()
+        && sender != null
+        && hasEcdsaDisabledDelegation(sender.getCode())) {
+      return ValidationResult.invalid(
+          TransactionInvalidReason.TX_SENDER_NOT_AUTHORIZED,
+          String.format(
+              "Sender %s has an ECDSA-disabled delegation (EIP-7851) and so is not authorized to send transactions",
+              transaction.getSender()));
+    }
+
     if (!validationParams.isAllowContractAddressAsSender()
         && !canSendTransaction(sender, codeHash)) {
       return ValidationResult.invalid(
@@ -365,7 +379,8 @@ public class MainnetTransactionValidator implements TransactionValidator {
   }
 
   private static boolean canSendTransaction(final Account sender, final Hash codeHash) {
-    return codeHash.equals(Hash.EMPTY) || hasCodeDelegation(sender.getCode());
+    return codeHash.equals(Hash.EMPTY)
+        || (hasCodeDelegation(sender.getCode()) && !hasEcdsaDisabledDelegation(sender.getCode()));
   }
 
   private ValidationResult<TransactionInvalidReason> validateTransactionSignature(

@@ -558,6 +558,75 @@ class CodeDelegationProcessorTest {
     return new AuthorityAccess(authorityOf(codeDelegation), newAccount, accountWrite, authBase);
   }
 
+  // --- EIP-7851 (Draft): authorizations signed by an ECDSA-disabled authority are skipped ---
+
+  private static final Bytes ECDSA_DISABLED_CODE =
+      Bytes.concatenate(
+          CodeDelegationHelper.ECDSA_DISABLED_DELEGATION_PREFIX, OTHER_DELEGATE_ADDRESS.getBytes());
+  private static final Bytes ECDSA_ENABLED_CODE =
+      Bytes.concatenate(
+          CodeDelegationHelper.CODE_DELEGATION_PREFIX, OTHER_DELEGATE_ADDRESS.getBytes());
+
+  private CodeDelegationProcessor processorWithRealService() {
+    return new CodeDelegationProcessor(
+        Optional.of(CHAIN_ID), HALF_CURVE_ORDER, new CodeDelegationService());
+  }
+
+  @Test
+  void shouldSkipAuthorizationFromEcdsaDisabledAuthority() {
+    CodeDelegation codeDelegation = createCodeDelegation(CHAIN_ID, 1L);
+    when(transaction.getCodeDelegationList()).thenReturn(Optional.of(List.of(codeDelegation)));
+    when(worldUpdater.get(any())).thenReturn(authority);
+    when(authority.getCode()).thenReturn(ECDSA_DISABLED_CODE);
+    lenient().when(authority.getNonce()).thenReturn(1L);
+
+    CodeDelegationResult result = processorWithRealService().process(worldUpdater, transaction);
+
+    assertThat(result.alreadyExistingDelegators()).isZero();
+    assertThat(result.authorityAccesses())
+        .containsExactly(AuthorityAccess.touchOnly(authorityOf(codeDelegation)));
+    verify(worldUpdater, never()).getAccount(any());
+    verify(worldUpdater, never()).createAccount(any());
+    verify(authority, never()).setCode(any());
+    verify(authority, never()).incrementNonce();
+  }
+
+  @Test
+  void shouldSkipClearingAuthorizationFromEcdsaDisabledAuthority() {
+    CodeDelegation codeDelegation =
+        createCodeDelegation(CHAIN_ID, 1L, BigInteger.ONE, Address.ZERO);
+    when(transaction.getCodeDelegationList()).thenReturn(Optional.of(List.of(codeDelegation)));
+    when(worldUpdater.get(any())).thenReturn(authority);
+    when(authority.getCode()).thenReturn(ECDSA_DISABLED_CODE);
+    lenient().when(authority.getNonce()).thenReturn(1L);
+
+    CodeDelegationResult result = processorWithRealService().process(worldUpdater, transaction);
+
+    assertThat(result.alreadyExistingDelegators()).isZero();
+    verify(worldUpdater, never()).getAccount(any());
+    verify(authority, never()).setCode(any());
+    verify(authority, never()).incrementNonce();
+  }
+
+  @Test
+  void shouldStillApplyAuthorizationFromEcdsaEnabledAuthority() {
+    CodeDelegation codeDelegation = createCodeDelegation(CHAIN_ID, 1L);
+    when(transaction.getCodeDelegationList()).thenReturn(Optional.of(List.of(codeDelegation)));
+    when(worldUpdater.get(any())).thenReturn(authority);
+    when(worldUpdater.getAccount(any())).thenReturn(authority);
+    when(authority.getCode()).thenReturn(ECDSA_ENABLED_CODE);
+    when(authority.getNonce()).thenReturn(1L);
+
+    CodeDelegationResult result = processorWithRealService().process(worldUpdater, transaction);
+
+    assertThat(result.alreadyExistingDelegators()).isEqualTo(1);
+    verify(authority)
+        .setCode(
+            Bytes.concatenate(
+                CodeDelegationHelper.CODE_DELEGATION_PREFIX, DELEGATE_ADDRESS.getBytes()));
+    verify(authority).incrementNonce();
+  }
+
   private CodeDelegation createCodeDelegation(final BigInteger chainId, final long nonce) {
     return createCodeDelegation(chainId, nonce, BigInteger.ONE);
   }

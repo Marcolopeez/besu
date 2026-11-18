@@ -16,6 +16,7 @@ package org.hyperledger.besu.evm.worldstate;
 
 import static org.hyperledger.besu.evm.worldstate.CodeDelegationHelper.CODE_DELEGATION_PREFIX;
 import static org.hyperledger.besu.evm.worldstate.CodeDelegationHelper.hasCodeDelegation;
+import static org.hyperledger.besu.evm.worldstate.CodeDelegationHelper.hasEcdsaDisabledDelegation;
 
 import org.hyperledger.besu.datatypes.Address;
 import org.hyperledger.besu.evm.account.Account;
@@ -49,12 +50,18 @@ public class CodeDelegationService {
   }
 
   /**
-   * Returns true if the provided account has either no code set or has already delegated code.
+   * Returns true if the provided account has either no code set or has already delegated code that
+   * is not an ECDSA-disabled delegation. Per EIP-7851, an authorization signed by an authority with
+   * an ECDSA-disabled delegation ({@code 0xef0101}) is invalid and must be skipped.
    *
    * @param account the account to check.
    * @return {@code true} if the account can set delegated code, {@code false} otherwise.
    */
   public boolean canSetCodeDelegation(final Account account) {
-    return account != null && (account.getCode().isEmpty() || hasCodeDelegation(account.getCode()));
+    if (account == null) {
+      return false;
+    }
+    final Bytes code = account.getCode();
+    return code.isEmpty() || (hasCodeDelegation(code) && !hasEcdsaDisabledDelegation(code));
   }
 }

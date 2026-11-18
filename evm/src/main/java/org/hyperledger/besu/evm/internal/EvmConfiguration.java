@@ -30,6 +30,8 @@ import java.util.OptionalInt;
  * @param maxCodeSizeOverride An optional override of the maximum code size set by the EVM fork
  * @param maxInitcodeSizeOverride An optional override of the maximum initcode size set by the EVM
  *     fork
+ * @param enableEip7851 register the experimental SETSELFDELEGATE opcode (EIP-7851, Draft) from
+ *     Prague onwards
  */
 public record EvmConfiguration(
     long jumpDestCacheWeightKB,
@@ -38,7 +40,8 @@ public record EvmConfiguration(
     boolean enableEvmV2,
     Integer evmStackSize,
     Optional<Integer> maxCodeSizeOverride,
-    Optional<Integer> maxInitcodeSizeOverride) {
+    Optional<Integer> maxInitcodeSizeOverride,
+    boolean enableEip7851) {
 
   /** How should the world state update be handled within transactions? */
   public enum WorldUpdaterMode {
@@ -72,7 +75,8 @@ public record EvmConfiguration(
         false,
         MessageFrame.DEFAULT_MAX_STACK_SIZE,
         Optional.empty(),
-        Optional.empty());
+        Optional.empty(),
+        false);
   }
 
   /**
@@ -93,9 +97,33 @@ public record EvmConfiguration(
         worldstateUpdateMode,
         enableOptimizedOpcodes,
         enableEvmV2,
+        false);
+  }
+
+  /**
+   * Create an EVM Configuration without any overrides, with explicit EVM v2 and EIP-7851 flags
+   *
+   * @param jumpDestCacheWeightKilobytes the jump dest cache weight (in kibibytes)
+   * @param worldstateUpdateMode the world update mode
+   * @param enableOptimizedOpcodes enabled opcode optimizations
+   * @param enableEvmV2 enable experimental EVM v2 with long[] stack representation
+   * @param enableEip7851 register the experimental SETSELFDELEGATE opcode (EIP-7851, Draft)
+   */
+  public EvmConfiguration(
+      final Long jumpDestCacheWeightKilobytes,
+      final WorldUpdaterMode worldstateUpdateMode,
+      final boolean enableOptimizedOpcodes,
+      final boolean enableEvmV2,
+      final boolean enableEip7851) {
+    this(
+        jumpDestCacheWeightKilobytes,
+        worldstateUpdateMode,
+        enableOptimizedOpcodes,
+        enableEvmV2,
         MessageFrame.DEFAULT_MAX_STACK_SIZE,
         Optional.empty(),
-        Optional.empty());
+        Optional.empty(),
+        enableEip7851);
   }
 
   /**
@@ -129,6 +157,7 @@ public record EvmConfiguration(
         newMaxCodeSize.isPresent() ? Optional.of(newMaxCodeSize.getAsInt()) : Optional.empty(),
         newMaxInitcodeSize.isPresent()
             ? Optional.of(newMaxInitcodeSize.getAsInt())
-            : Optional.empty());
+            : Optional.empty(),
+        enableEip7851);
   }
 }

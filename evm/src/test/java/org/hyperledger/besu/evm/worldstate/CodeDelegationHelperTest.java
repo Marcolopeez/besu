@@ -66,6 +66,77 @@ class CodeDelegationHelperTest {
     assertThat(CodeDelegationHelper.hasCodeDelegation(validCode)).isTrue();
   }
 
+  // --- EIP-7851 (Draft): ECDSA-disabled delegation 0xef0101 ---
+
+  private static final Bytes DISABLED_PREFIX =
+      CodeDelegationHelper.ECDSA_DISABLED_DELEGATION_PREFIX;
+
+  @Test
+  void hasCodeDelegationReturnsTrueForEcdsaDisabledDelegation() {
+    Bytes disabled = Bytes.concatenate(DISABLED_PREFIX, Bytes.random(20));
+    assertThat(disabled.size()).isEqualTo(DELEGATED_SIZE);
+    assertThat(CodeDelegationHelper.hasCodeDelegation(disabled)).isTrue();
+  }
+
+  @Test
+  void hasCodeDelegationReturnsFalseForOtherEf01Prefix() {
+    Bytes other = Bytes.concatenate(Bytes.fromHexString("ef0102"), Bytes.random(20));
+    assertThat(CodeDelegationHelper.hasCodeDelegation(other)).isFalse();
+    assertThat(CodeDelegationHelper.hasEcdsaDisabledDelegation(other)).isFalse();
+  }
+
+  @Test
+  void ecdsaDisabledDelegationRequiresExactly23Bytes() {
+    Bytes shorter = Bytes.concatenate(DISABLED_PREFIX, Bytes.random(19));
+    Bytes longer = Bytes.concatenate(DISABLED_PREFIX, Bytes.random(21));
+    assertThat(CodeDelegationHelper.hasCodeDelegation(shorter)).isFalse();
+    assertThat(CodeDelegationHelper.hasCodeDelegation(longer)).isFalse();
+    assertThat(CodeDelegationHelper.hasEcdsaDisabledDelegation(shorter)).isFalse();
+    assertThat(CodeDelegationHelper.hasEcdsaDisabledDelegation(longer)).isFalse();
+  }
+
+  @Test
+  void hasEcdsaDisabledDelegationIsTrueOnlyForEf0101() {
+    assertThat(CodeDelegationHelper.hasEcdsaDisabledDelegation(null)).isFalse();
+    assertThat(CodeDelegationHelper.hasEcdsaDisabledDelegation(Bytes.EMPTY)).isFalse();
+    assertThat(
+            CodeDelegationHelper.hasEcdsaDisabledDelegation(
+                Bytes.concatenate(CODE_PREFIX, Bytes.random(20))))
+        .isFalse();
+    assertThat(
+            CodeDelegationHelper.hasEcdsaDisabledDelegation(
+                Bytes.concatenate(DISABLED_PREFIX, Bytes.random(20))))
+        .isTrue();
+  }
+
+  @Test
+  void getTargetAddressWorksForEcdsaDisabledDelegation() {
+    Address delegate = Address.wrap(Bytes.random(20));
+    Bytes disabled = Bytes.concatenate(DISABLED_PREFIX, delegate.getBytes());
+    assertThat(CodeDelegationHelper.getTargetAddress(disabled)).isEqualTo(delegate);
+  }
+
+  @Test
+  void getTargetFollowsEcdsaDisabledDelegation() {
+    Bytes disabled = Bytes.concatenate(DISABLED_PREFIX, Bytes.random(20));
+    when(account.getCode()).thenReturn(disabled);
+
+    Address targetAddress = Address.wrap(disabled.slice(DISABLED_PREFIX.size()));
+    Account targetAccount = mock(Account.class);
+    Bytes targetCode = Bytes.fromHexString("60006000");
+
+    when(worldUpdater.get(targetAddress)).thenReturn(targetAccount);
+    when(targetAccount.getOrCreateCachedCode()).thenReturn(new Code(targetCode));
+    when(gasCalculator.isPrecompile(targetAddress)).thenReturn(false);
+
+    CodeDelegationHelper.Target target =
+        CodeDelegationHelper.getTarget(
+            worldUpdater, gasCalculator::isPrecompile, account, Optional.empty());
+
+    assertThat(target.code().getBytes()).isEqualTo(targetCode);
+    assertThat(target.address()).isEqualTo(targetAddress);
+  }
+
   @Test
   void getTargetAccountReturnsEmptyIfCodeIsNull() {
     assertThatThrownBy(

@@ -35,6 +35,9 @@ public class EvmOptions implements CLIOptions<EvmConfiguration> {
   /** The constant EVM_V2. */
   public static final String EVM_V2 = "--Xevm-v2";
 
+  /** The constant EIP_7851. */
+  public static final String EIP_7851 = "--Xeip7851-enabled";
+
   /** Default constructor. */
   EvmOptions() {}
 
@@ -83,10 +86,23 @@ public class EvmOptions implements CLIOptions<EvmConfiguration> {
       arity = "1")
   private boolean enableEvmV2 = false;
 
+  @CommandLine.Option(
+      names = {EIP_7851},
+      description =
+          "Enable the experimental SETSELFDELEGATE opcode (EIP-7851, Draft; opcode 0xac) from Prague onwards (default: false)",
+      fallbackValue = "true",
+      hidden = true,
+      arity = "0..1")
+  private boolean enableEip7851 = false;
+
   @Override
   public EvmConfiguration toDomainObject() {
     return new EvmConfiguration(
-        jumpDestCacheWeightKilobytes, worldstateUpdateMode, enableOptimizedOpcodes, enableEvmV2);
+        jumpDestCacheWeightKilobytes,
+        worldstateUpdateMode,
+        enableOptimizedOpcodes,
+        enableEvmV2,
+        enableEip7851);
   }
 
   @Override
