@@ -266,7 +266,7 @@ Unos 25 tests. La mayoría son variaciones de tests que ya existen.
 | **H1** Besu C1 | Cambios de §3 y tests de §8. **Hecho el 18-11 (G2 cumplido)** | B-2 a B-6 a nivel unitario |
 | **H2** Aceptación en devnet | Besu C1 en la devnet, con el helper y un delegado trivial (sin OTS-C1). **Hecho el 18-11 (36/36 V)** | B-10; OP-tx, OP-auth y OP-permit tras una retirada directa; EXTCODE*; **FI-1**, **FI-3**, **FI-4**, **FI-7**, **FI-8** a nivel de protocolo; FI-9 opcional |
 | **H3** OTS-C1 | `initializeAndRetire`, `retire()`, `P`, redelegación con `ρ`; tests Foundry con el helper simulado. **Hecho el 18-11 en Foundry (26/26), en `ots/c1/`, rama `research/c1` (D-47)** | Lógica de C1-cl-O, C1-ql-O y C1-qr-O en Foundry (OP-redel, OP-adv) |
-| **H4a** X1-V1 | T1 de §2.2 en la devnet | **C1-cl-M**, **C1-ql-M** (mismo ensayo con otra entrega de claves), **FI-2**, FI-3 y FI-4 con OTS-C1 (FI-3 necesita una variante de prueba sin la comprobación del valor devuelto), **C1-hc-M** en los dos órdenes, **C1-qr-M** (carrera con la autorización del atacante; FI-8) |
+| **H4a** X1-V1 | T1 de §2.2 en la devnet | **C1-cl-M**, **C1-ql-M** (mismo ensayo con otra entrega de claves), **FI-2**, FI-3 y FI-4 con OTS-C1 (FI-3 necesita una variante de prueba sin la comprobación del valor devuelto), **C1-hc-M** en los dos órdenes, **C1-qr-M** (carrera con la autorización del atacante; FI-8). **Hecho el 19-11 (G3 cumplido): todas V** (`experimentos/X1-migracion-C1/resultados/2026-11-19-6508e6eb-93228081.md`; AFIRMACIONES #100–#108). FI-3 no usó una variante sin comprobación, sino OTS-C1 con un helper que devuelve 0 (D-51): da el estado de FI-2 |
 | **H4b** X1-V2 y control | T1 + T2a/T2b; ejecuciones de control | **FI-5**, **FI-6**, FI-7 con OTS; C1-cl-O/R y C1-hc-O/R (una ejecución de control cada una); OP-redel en Besu |
 | H5 (fuera de X1) | X4 en C1 | X4-1 a X4-4 en Besu |
 
@@ -316,7 +316,7 @@ Unos 25 tests. La mayoría son variaciones de tests que ya existen.
 |---|---|---|---|
 | G1 | 21-11 | H0 hecho: Besu compila y la devnet Prague produce bloques con una 7702 | Versión reducida (D-18) |
 | G2 | 25-11 | H1 hecho: tests de B-2 a B-6 en verde | Versión reducida; Besu pasa a trabajo posterior |
-| G3 | 29-11 | H4a con C1-cl-M y FI-2 a FI-4 | Se envía sin X1, o con H2 solo como validación de la realización (sin afirmar celdas de la matriz) |
+| G3 | 29-11 | H4a con C1-cl-M y FI-2 a FI-4 | Se envía sin X1, o con H2 solo como validación de la realización (sin afirmar celdas de la matriz). **Cumplido el 19-11** |
 | Corte | 1-12 | Redacción | — |
 
 ---
@@ -328,7 +328,7 @@ Pendiente:
 - Que `OperationsV2.of` cubra una operación sin versión v2 (solo afecta si se activa `--Xevm-v2`). No se ha probado en H1.
 - SETSELFDELEGATE en el modo JOURNALED (H1 solo con STACKED, que es el de la devnet).
 - Si Besu acepta reorgs por `forkchoiceUpdated` sin CL (FI-9).
-- Foundry: si `forge script --skip-simulation` existe con ese nombre en la versión del Mac (**1.8.5**, no 1.5.1) y si compila `.yul`.
+- Foundry: si `forge script --skip-simulation` existe con ese nombre en 1.8.5 y si compila `.yul`. Ya no hace falta: H4a desplegó con `forge build` + `cast send --create` (D-51).
 - EIP-3541 no tiene copia local en `fuentes/`.
 
 Resuelto en H0 (18-11; `experimentos/besu-h0/resultados/2026-11-18-h0.md`):
@@ -350,3 +350,10 @@ Resuelto en H2 (18-11; `experimentos/besu-h2/resultados/2026-11-18-h2.md`):
 - `eth_sendRawTransaction` con un remitente `ef0101` devuelve solo `-32007` «Sender account not authorized to send transactions», sin el mensaje de DV-4 (D: `EthSendRawTransaction` l. 117–138; V). No se cambia (D-46).
 - Pool (V): rechazo por RPC (tipos 2 y legacy) y, con DV-3, una pendiente de h que pasa a ser inválida en el mismo bloque se borra al seleccionarla (FI-7).
 - Un `eth_call` sin `to` cuyo retorno empieza por `0xEF` falla con «Code is invalid» (EIP-3541, V). Las sondas de EXTCODE* no deben devolver el indicador al principio.
+
+Resuelto en H4a (19-11; `experimentos/X1-migracion-C1/resultados/2026-11-19-6508e6eb-93228081.md`):
+
+- §9.6 (V): `forge create` 1.8.5 necesita `--broadcast` y espera el recibo. Se despliega con `forge build` (salidas fuera del repositorio) y `cast send --async --create <CODE> [SIG] [ARGS]`, un bloque por despliegue (D-51). P y d quedan con el runtime de los artefactos.
+- Firmas de OTS-C1 (V): el digest se obtiene con `eth_call` a `hashOperation` / `hashRecoveryOperation` en `a` (a través de P) y se firma con `cast wallet sign --no-hash`.
+- Pool (V y D): la comprobación de saldo para el valor transferido va antes que la de 7851 (`MainnetTransactionValidator` l. 322–335 y 356–365). Con saldo 0 y valor > 0, la OP-tx da -32004.
+- Reembolso de 7702 (V): se aplica aunque la tipo 4 falle (FI-4, FI-2b).
